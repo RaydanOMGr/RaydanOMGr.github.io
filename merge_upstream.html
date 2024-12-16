@@ -1,0 +1,155 @@
+<!DOCTYPE HTML>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="title" content="Как правильно получать и сливать изменения из апстрима в свой форк">
+    <meta name="description" content="Руководство по получению и слиянию изменений из апстрима в форк: пошаговая инструкция и советы по работе с Git и GitHub.">
+    <meta name="og:type" content="website">
+    <meta name="og:title" content="Как правильно получать и сливать изменения из апстрима в свой форк">
+    <meta name="og:description" content="Подробное руководство по синхронизации форка с апстримом: как правильно обновлять репозиторий, избегать конфликтов и поддерживать актуальность кода.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Как правильно получать и сливать изменения из апстрима в свой форк">
+    <meta name="twitter:description" content="Как синхронизировать свой форк с основным репозиторием, советы по слиянию изменений и предотвращению конфликтов.">
+    <style>
+        body {
+            font-family: Calibri, Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            color: #333;
+        }
+
+        h2, h3 {
+            color: #0056b3;
+        }
+
+        code, pre {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 1.1em; /* Increased font size */
+            background-color: #f5f5f5;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        pre {
+            overflow-x: auto;
+            padding: 10px;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: #ccc;
+            margin: 20px 0;
+        }
+    </style>
+    <title>Как правильно получать и сливать изменения из апстрима в свой форк</title>
+</head>
+<h3 id="-">Как правильно получать и сливать изменения из апстрима в свой форк</h3>
+<p>Когда вы работаете с форком на GitHub, важно поддерживать ваш репозиторий в актуальном состоянии, синхронизируя его с изменениями, сделанными в оригинальном репозитории (апстриме). Это необходимо для того, чтобы не отставать от изменений, происходящих в основном проекте, и избежать возможных проблем при слиянии.</p>
+<p>В этом руководстве мы пошагово разберемся, как правильно получать и сливать изменения из апстрима в свой форк.</p>
+<hr>
+<h3 id="1-">1. <strong>Настройка апстрима в локальном репозитории</strong></h3>
+<p>Для того чтобы получать изменения из оригинального репозитория, нужно добавить его как <strong>удалённый репозиторий</strong> (upstream). Это позволяет Git знать, откуда брать изменения, а не только из вашего форка.</p>
+<h4 id="-">Как добавить апстрим:</h4>
+<ol>
+<li><p>Перейдите в свой локальный репозиторий:</p>
+<pre><code class="lang-bash">cd <span class="hljs-regexp">/путь/</span>к<span class="hljs-regexp">/вашему/</span>репозиторию
+</code></pre>
+</li>
+<li><p>Добавьте апстрим, указав ссылку на оригинальный репозиторий:</p>
+<pre><code class="lang-bash">git remote <span class="hljs-built_in">add</span> upstream http<span class="hljs-variable">s:</span>//github.<span class="hljs-keyword">com</span>/<span class="hljs-symbol">&lt;repo_owner&gt;</span>/<span class="hljs-symbol">&lt;upstream_repo&gt;</span>.git
+</code></pre>
+<p>Здесь:</p>
+<ul>
+<li><code>&lt;repo_owner&gt;</code> — это имя владельца оригинального репозитория.</li>
+<li><code>&lt;upstream_repo&gt;</code> — это имя репозитория, который является оригиналом вашего форка.</li>
+</ul>
+</li>
+<li><p>Проверьте, что апстрим добавлен:</p>
+<pre><code class="lang-bash"><span class="hljs-attribute">git remote -v</span>
+</code></pre>
+<p>Вы должны увидеть как ваш <code>origin</code> (ваш форк), так и <code>upstream</code> (оригинальный репозиторий).</p>
+</li>
+</ol>
+<hr>
+<h3 id="2-">2. <strong>Как получать изменения из апстрима</strong></h3>
+<p>Теперь, когда апстрим добавлен, нужно регулярно синхронизировать ваш форк с оригинальным репозиторием, чтобы не отставать от новых изменений.</p>
+<h4 id="-">Шаги получения изменений из апстрима:</h4>
+<ol>
+<li><p><strong>Получите изменения из апстрима</strong>:</p>
+<pre><code class="lang-bash"><span class="hljs-attribute">git fetch upstream</span>
+</code></pre>
+<p>Эта команда скачивает изменения из апстрима, но не вносит их в ваш текущий рабочий каталог.</p>
+</li>
+<li><p><strong>Переключитесь на основную ветку вашего форка</strong> (например, <code>main</code>):</p>
+<pre><code class="lang-bash"><span class="hljs-attribute">git checkout main</span>
+</code></pre>
+</li>
+<li><p><strong>Слейте изменения из апстрима в вашу основную ветку</strong>:</p>
+<pre><code class="lang-bash">git <span class="hljs-keyword">merge</span> upstream/<span class="hljs-keyword">main</span>
+</code></pre>
+<p>Эта команда сливает изменения из основной ветки оригинального репозитория (апстрима) в вашу основную ветку.</p>
+</li>
+<li><p>Если возникнут конфликты, разрешите их, как было описано в предыдущем руководстве по разрешению конфликтов слияния. После разрешения конфликтов добавьте изменения:</p>
+<pre><code class="lang-bash">git <span class="hljs-keyword">add</span><span class="bash"> .</span>
+</code></pre>
+</li>
+<li><p>Закоммитьте изменения (если нужно):</p>
+<pre><code class="lang-bash"><span class="hljs-attribute">git commit</span>
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3 id="3-origin-">3. <strong>Как отправить изменения в ваш форк (origin)</strong></h3>
+<p>После того как вы синхронизировали свой репозиторий с апстримом, нужно отправить эти изменения в ваш форк на GitHub, чтобы он также оставался актуальным.</p>
+<ol>
+<li><strong>Отправьте изменения в ваш форк</strong>:<pre><code class="lang-bash">git <span class="hljs-built_in">push</span> <span class="hljs-built_in">origin</span> main
+</code></pre>
+Это отправит вашу актуальную версию основной ветки в ваш репозиторий на GitHub.</li>
+</ol>
+<hr>
+<h3 id="4-">4. <strong>Как синхронизировать другие ветки с апстримом</strong></h3>
+<p>Если вы работаете не только в основной ветке, но и в других ветках, вы можете синхронизировать их с апстримом таким же образом.</p>
+<ol>
+<li><p>Переключитесь на нужную ветку:</p>
+<pre><code class="lang-bash">git checkout <span class="hljs-tag">&lt;<span class="hljs-name">название_ветки</span>&gt;</span>
+</code></pre>
+</li>
+<li><p>Получите изменения из апстрима:</p>
+<pre><code class="lang-bash"><span class="hljs-attribute">git fetch upstream</span>
+</code></pre>
+</li>
+<li><p>Слейте изменения в вашу ветку:</p>
+<pre><code class="lang-bash">git <span class="hljs-keyword">merge</span> upstream/<span class="hljs-keyword">main</span>
+</code></pre>
+</li>
+<li><p>Разрешите конфликты, если они возникнут.</p>
+</li>
+<li><p>Отправьте изменения в ваш форк:</p>
+<pre><code class="lang-bash">git <span class="hljs-built_in">push</span> <span class="hljs-built_in">origin</span> &lt;название<span class="hljs-symbol">_</span>ветки&gt;
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3 id="5-">5. <strong>Как избежать проблем при слиянии с апстримом</strong></h3>
+<p>Чтобы уменьшить вероятность конфликтов и проблем при слиянии, следуйте этим рекомендациям:</p>
+<ol>
+<li><p><strong>Регулярно синхронизируйте ваш форк</strong> с апстримом. Лучше делать это несколько раз в неделю, чтобы избежать накопления большого числа изменений и сложных конфликтов.</p>
+</li>
+<li><p><strong>Работайте в отдельных ветках</strong> для каждой задачи. Это поможет изолировать ваши изменения от изменений, происходящих в апстриме.</p>
+</li>
+<li><p><strong>Перед началом работы всегда получайте последние изменения</strong> из апстрима:</p>
+<pre><code class="lang-bash">git fetch upstream
+git checkout main
+git <span class="hljs-keyword">merge</span> upstream/<span class="hljs-keyword">main</span>
+</code></pre>
+</li>
+<li><p><strong>Не сливайте ветки до тех пор, пока не синхронизируете их с апстримом</strong>. Перед тем как сделать пулл-реквест, убедитесь, что ваша ветка актуальна и не отстает от изменений в оригинальном репозитории.</p>
+</li>
+</ol>
+<hr>
+<h3 id="-">Заключение</h3>
+<p>Правильная работа с форками и апстримом — это важная часть командной разработки. С помощью команд <code>git fetch</code> и <code>git merge</code> вы можете регулярно синхронизировать ваш форк с оригинальным репозиторием, получая все последние изменения и избегая проблем при слиянии. Главное — не забывать регулярно обновлять ваш репозиторий и работать в отдельных ветках, чтобы минимизировать конфликты.</p>
+
+  </html>
