@@ -3,6 +3,7 @@
     <head>
         <title>The Boardwalk Family</title>
         <meta charset="UTF-8">
+        <meta name="darkreader-lock">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,26 +16,38 @@
 
         <p id="mode_toggle" onclick="toggleMode()" style="color: blue; text-decoration: underline;">Dark Mode</p>
         <script>
-            let darkMode = "Dark Mode";
-            let whiteMode = "Bright Mode";
+            let themes = {
+                dark: {
+                    text: "Dark Mode",
+                    backgroundColor: "black",
+                    textColor: "white",
+                    imageFilter: "invert(1)",
+                    hyperlinkColor: "cyan",
+                },
+                white: {
+                    text: "Bright Mode",
+                    backgroundColor: "white",
+                    textColor: "black",
+                    imageFilter: "",
+                    hyperlinkColor: "blue",
+                }
+            };
 
-            let darkBg = "black";
-            let whiteBg = "white";
-
-            let darkFilter = "invert(1)";
-            let whiteFilter = "";
-
-            let darkBlueColor = "cyan";
-            let whiteBlueColor = "blue";
-
-            let dark = false;
+            let theme = themes.white;
             function toggleMode() {
-                dark = !dark;
-                document.getElementById("mode_toggle").innerText = dark ? whiteMode : darkMode;
-                document.body.style["backgroundColor"] = dark ? darkBg : whiteBg;
-                document.body.style["color"] = dark ? whiteBg : darkBg;
-                document.getElementById("illustration").style["filter"] = dark ? darkFilter : whiteFilter;
-                document.getElementById("mode_toggle").style["color"] = dark ? darkBlueColor : whiteBlueColor;
+                theme = theme == themes.white ? themes.dark : themes.white;
+
+                document.getElementById("mode_toggle").innerText = theme.text;
+                document.getElementById("mode_toggle").style["color"] = theme.hyperlinkColor;
+
+                document.body.style["backgroundColor"] = theme.backgroundColor;
+                document.body.style["color"] = theme.textColor;
+
+                document.getElementById("illustration").style["filter"] = theme.imageFilter;
+            }
+            
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                toggleMode();
             }
         </script>
     </body>
