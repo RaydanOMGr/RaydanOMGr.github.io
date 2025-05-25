@@ -4,10 +4,38 @@
         <title>The Boardwalk Family</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
     </head>
-    <body>
+    <body style="font-family: 'Roboto', sans-serif; text-align: center;">
         <h1>The Boardwalk Family</h1>
         <h2>The mobile Minecraft: Java Edition landscape</h2>
-        <img src="illustration.png" width="100%" />
+        <img id="illustration" src="illustration.png" width="100%" />
+
+        <p id="mode_toggle" onclick="toggleMode()" style="color: blue; text-decoration: underline;">Dark Mode</p>
+        <script>
+            let darkMode = "Dark Mode";
+            let whiteMode = "Bright Mode";
+
+            let darkBg = "black";
+            let whiteBg = "white";
+
+            let darkFilter = "invert(1)";
+            let whiteFilter = "";
+
+            let darkBlueColor = "cyan";
+            let whiteBlueColor = "blue";
+
+            let dark = false;
+            function toggleMode() {
+                dark = !dark;
+                document.getElementById("mode_toggle").innerText = dark ? whiteMode : darkMode;
+                document.body.style["backgroundColor"] = dark ? darkBg : whiteBg;
+                document.body.style["color"] = dark ? whiteBg : darkBg;
+                document.getElementById("illustration").style["filter"] = dark ? darkFilter : whiteFilter;
+                document.getElementById("mode_toggle").style["color"] = dark ? darkBlueColor : whiteBlueColor;
+            }
+        </script>
     </body>
 </html>
