@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<meta property="og:title" content="MT6877 Boot Chain Analysis — Consolidated Report">
+<meta property="og:description" content="Xiaomi ruby (Dimensity 920) boot chain: BROM → Preloader → LK → Kernel. 7 vulnerabilities, efuse state, patch analysis, and attack paths.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Xiaomi MT6877 RE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MT6877 Boot Chain Analysis — Consolidated Report">
+<meta name="twitter:description" content="Xiaomi ruby (Dimensity 920) boot chain: BROM → Preloader → LK → Kernel. 7 vulnerabilities, efuse state, patch analysis, and attack paths.">
 <title>MT6877 Boot Chain Analysis — Consolidated Report</title>
 <style>
   :root {
@@ -16,19 +24,92 @@
     --orange: #d29922;
     --red: #f85149;
     --purple: #bc8cff;
+    --sidebar-w: 260px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
-    padding: 0;
+    display: flex;
+    min-height: 100vh;
   }
-  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+
+  /* Sidebar */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--sidebar-w);
+    height: 100vh;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 0;
+    z-index: 100;
+  }
+  .sidebar-title {
+    font-size: 0.85em;
+    font-weight: 700;
+    color: var(--accent);
+    padding: 0 16px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .sidebar a {
+    display: block;
+    padding: 6px 16px;
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 0.82em;
+    transition: background 0.15s, color 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .sidebar a:hover,
+  .sidebar a:focus {
+    background: rgba(88,166,255,0.08);
+    color: var(--text);
+  }
+  .sidebar a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(88,166,255,0.06);
+  }
+  .sidebar-section {
+    margin-top: 4px;
+  }
+  .sidebar-section a { padding-left: 24px; font-size: 0.78em; }
+  .sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 12px; left: 12px;
+    z-index: 200;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 1.2em;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .sidebar-overlay { display: none; }
+
+  /* Main content */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    max-width: 960px;
+    padding: 40px 40px 60px;
+  }
+
+  .container { width: 100%; }
+
   h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
-  h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 32px 0 16px; }
-  h3 { font-size: 1.15em; margin: 24px 0 12px; }
+  h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 40px 0 16px; }
+  h3 { font-size: 1.15em; margin: 28px 0 12px; }
   h4 { font-size: 1em; margin: 16px 0 8px; }
   p { margin: 0 0 12px; }
   a { color: var(--accent); }
@@ -69,13 +150,11 @@
     border-radius: 0;
   }
 
-  /* Inline formatting */
   strong { color: #fff; }
   .severity-critical { color: var(--red); font-weight: 700; }
   .severity-high { color: var(--orange); font-weight: 700; }
   .severity-medium { color: var(--purple); font-weight: 700; }
 
-  /* ASCII diagrams */
   .ascii {
     font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
     font-size: 0.8em;
@@ -89,12 +168,10 @@
     margin: 12px 0 20px;
   }
 
-  /* Lists */
   ul, ol { margin: 8px 0 16px; padding-left: 24px; }
   li { margin-bottom: 4px; }
   ul ul, ol ol { margin: 4px 0; }
 
-  /* Section anchors */
   .section-tag {
     display: inline-block;
     background: var(--accent);
@@ -107,7 +184,6 @@
     vertical-align: middle;
   }
 
-  /* Vuln blocks */
   .vuln {
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -119,18 +195,104 @@
   .vuln-label { font-size: 0.8em; color: var(--text2); margin-bottom: 8px; }
   .vuln-label span { margin-right: 16px; }
 
-  /* Patch diff */
-  .diff-orig { color: var(--red); }
-  .diff-new { color: var(--green); }
+  /* Downloads section */
+  .download-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .download-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .download-card .fn {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.82em;
+    word-break: break-all;
+  }
+  .download-card .sz {
+    font-size: 0.78em;
+    color: var(--text2);
+  }
+  .download-card .desc {
+    font-size: 0.82em;
+    color: var(--text);
+    flex: 1;
+  }
+  .download-btn {
+    display: inline-block;
+    background: var(--accent);
+    color: #000;
+    font-weight: 600;
+    font-size: 0.82em;
+    padding: 6px 16px;
+    border-radius: 4px;
+    text-decoration: none;
+    text-align: center;
+    transition: opacity 0.15s;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+  .download-btn:hover { opacity: 0.85; }
 
-  @media (max-width: 640px) {
-    .container { padding: 16px 12px; }
+  /* Responsive */
+  @media (max-width: 800px) {
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.25s;
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 99;
+    }
+    .sidebar-overlay.open { display: block; }
+    .sidebar-toggle { display: block; }
+    .main {
+      margin-left: 0;
+      padding: 60px 16px 40px;
+    }
     table { font-size: 0.8em; }
     th, td { padding: 6px 8px; }
+    .download-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
+
+<button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-title">Report Sections</div>
+  <a href="#top" onclick="closeSidebar()">Top</a>
+  <a href="#inventory" onclick="closeSidebar()">File Inventory</a>
+  <a href="#overview" onclick="closeSidebar()">Boot Chain Overview</a>
+  <div class="sidebar-section">
+    <a href="#stage1" onclick="closeSidebar()">Stage 1: BROM</a>
+    <a href="#stage2" onclick="closeSidebar()">Stage 2: Preloader</a>
+    <a href="#stage3" onclick="closeSidebar()">Stage 3: LK</a>
+  </div>
+  <a href="#memmap" onclick="closeSidebar()">Memory Map</a>
+  <a href="#patches" onclick="closeSidebar()">Patch Analysis</a>
+  <a href="#vulns" onclick="closeSidebar()">Vulnerability Surface</a>
+  <a href="#security" onclick="closeSidebar()">Security Architecture</a>
+  <a href="#attacksurf" onclick="closeSidebar()">Attack Surface</a>
+  <a href="#attackpath" onclick="closeSidebar()">Attack Path</a>
+  <a href="#coldstorage" onclick="closeSidebar()">Cold Storage Note</a>
+  <a href="#downloads" onclick="closeSidebar()" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;color:var(--green);font-weight:600;">Downloads</a>
+</nav>
+
+<div class="main" id="top">
 <div class="container">
 
 <h1>Mediatek MT6877 Boot Chain Analysis — Consolidated Report</h1>
@@ -144,7 +306,7 @@
 
 <hr>
 
-<h2>File Inventory</h2>
+<h2 id="inventory">File Inventory</h2>
 
 <table>
 <thead><tr><th>File</th><th>Size</th><th>Role</th><th>Processor Mode</th></tr></thead>
@@ -166,7 +328,7 @@
 
 <hr>
 
-<h2>Boot Chain Overview</h2>
+<h2 id="overview">Boot Chain Overview</h2>
 
 <p>Standard Mediatek 4-stage boot chain:</p>
 
@@ -202,7 +364,7 @@ STAGE 4: Linux Kernel (boot.img via LK)
 
 <hr>
 
-<h2>STAGE 1: BROM (Boot ROM)</h2>
+<h2 id="stage1">STAGE 1: BROM (Boot ROM)</h2>
 
 <h3>Reset Vector &amp; Early Init</h3>
 
@@ -251,7 +413,7 @@ STAGE 4: Linux Kernel (boot.img via LK)
 
 <hr>
 
-<h2>STAGE 2: Preloader</h2>
+<h2 id="stage2">STAGE 2: Preloader</h2>
 
 <h3>Loading &amp; GFH Header Chain</h3>
 
@@ -370,7 +532,7 @@ tee       → Trusted Execution Environment</code></pre>
 
 <hr>
 
-<h2>STAGE 3: LK (Little Kernel)</h2>
+<h2 id="stage3">STAGE 3: LK (Little Kernel)</h2>
 
 <h3>LK Binary Format (Mediatek BR Header)</h3>
 
@@ -457,7 +619,7 @@ B    0x4820314        ; Infinite loop</code></pre>
 
 <hr>
 
-<h2>Memory Map</h2>
+<h2 id="memmap">Memory Map</h2>
 
 <pre><code>Region          Start           End             Used By
 ──────          ─────           ───             ───────
@@ -471,7 +633,7 @@ DRAM heap       0x40000000+                     Available DRAM (up to 12 GB)</co
 
 <hr>
 
-<h2>Patch Analysis</h2>
+<h2 id="patches">Patch Analysis</h2>
 
 <h3>Preloader: Two Patching Strategies</h3>
 
@@ -531,7 +693,7 @@ STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
 
 <hr>
 
-<h2>Vulnerability Surface</h2>
+<h2 id="vulns">Vulnerability Surface</h2>
 
 <div class="vuln">
 <h4><span class="section-tag">VULN 1</span> GCPU Blacklist Bypass (Hardware Crypto Engine)</h4>
@@ -608,7 +770,7 @@ STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
 
 <hr>
 
-<h2>Security Architecture</h2>
+<h2 id="security">Security Architecture</h2>
 
 <ol>
 <li><strong>BROM → Preloader:</strong> RSA-2048 + SHA-256 signature check via key in GFH_BL_SEC_KEY. Fail → USB download mode (requires authenticated DA).</li>
@@ -632,7 +794,7 @@ STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
 
 <hr>
 
-<h2>Attack Surface Summary</h2>
+<h2 id="attacksurf">Attack Surface Summary</h2>
 
 <table>
 <thead><tr><th>#</th><th>Vulnerability</th><th>Stage</th><th>Access Required</th><th>Complexity</th><th>Impact</th></tr></thead>
@@ -647,7 +809,7 @@ STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
 </tbody>
 </table>
 
-<h2>Recommended Attack Path (Lowest Friction)</h2>
+<h2 id="attackpath">Recommended Attack Path (Lowest Friction)</h2>
 
 <pre><code>1. USB connection to device in BROM mode (vol up + power)
 2. Kamakiri (Vuln 2) → BROM code execution → dump BROM, verify blacklist addresses
@@ -664,7 +826,7 @@ STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
 
 <hr>
 
-<h2>Cold Storage Note</h2>
+<h2 id="coldstorage">Cold Storage Note</h2>
 
 <p>Efuse state (all 0xAA) is the single most critical finding:</p>
 <ul>
@@ -675,6 +837,112 @@ STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
 <li>OTA updates rewrite flash with locked state, but efuses unblown → software locks bypassable again via same exploits</li>
 </ul>
 
+<hr>
+
+<h2 id="downloads">Downloads</h2>
+
+<div class="download-grid">
+
+<div class="download-card">
+<div class="fn">brom_MT6877_MT6877V_MT8791N_959.bin</div>
+<div class="sz">128 KB</div>
+<div class="desc">BROM (Boot ROM) dump — ARM/Thumb, silicon ROM</div>
+<a class="download-btn" href="./brom_MT6877_MT6877V_MT8791N_959.bin" download>Download</a>
 </div>
+
+<div class="download-card">
+<div class="fn">preloader_ruby.bin</div>
+<div class="sz">472756 B</div>
+<div class="desc">Preloader — 2nd-stage bootloader, Thumb2, original</div>
+<a class="download-btn" href="./preloader_ruby.bin" download>Download</a>
+</div>
+
+<div class="download-card">
+<div class="fn">preloader_ruby_patched.bin</div>
+<div class="sz">472756 B</div>
+<div class="desc">Patched preloader — call-site NOP (12 B, 3 sites)</div>
+<a class="download-btn" href="./preloader_ruby_patched.bin" download>Download</a>
+</div>
+
+<div class="download-card">
+<div class="fn">preloader_ruby_patched_local.bin</div>
+<div class="sz">472756 B</div>
+<div class="desc">Patched preloader — function-return (8 B, 2 sites)</div>
+<a class="download-btn" href="./preloader_ruby_patched_local.bin" download>Download</a>
+</div>
+
+<div class="download-card">
+<div class="fn">out/lk_a.bin</div>
+<div class="sz">8 MB</div>
+<div class="desc">LK bootloader — original, MTK BR header + ARM/Thumb2</div>
+<a class="download-btn" href="./lk_a.bin" download>Download</a>
+</div>
+
+<div class="download-card">
+<div class="fn">lk_a_patched.bin</div>
+<div class="sz">8 MB</div>
+<div class="desc">LK bootloader — patched (boot mode state overwrite)</div>
+<a class="download-btn" href="./lk_a_patched.bin" download>Download</a>
+</div>
+
+</div>
+
+</div>
+</div>
+
+<script>
+(function() {
+  var toggle = document.getElementById('sidebarToggle');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    overlay.classList.add('open');
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+  }
+  window.closeSidebar = closeSidebar;
+
+  toggle.addEventListener('click', function() {
+    if (sidebar.classList.contains('open')) { closeSidebar(); }
+    else { openSidebar(); }
+  });
+  overlay.addEventListener('click', closeSidebar);
+
+  var links = sidebar.querySelectorAll('a');
+  var sections = [];
+  links.forEach(function(link) {
+    var href = link.getAttribute('href');
+    if (href && href.startsWith('#')) {
+      sections.push(href.substring(1));
+    }
+  });
+
+  function updateActive() {
+    var scrollY = window.scrollY + 100;
+    var activeId = 'top';
+    sections.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el && el.offsetTop <= scrollY) {
+        activeId = id;
+      }
+    });
+    links.forEach(function(link) {
+      var href = link.getAttribute('href');
+      link.classList.remove('active');
+      if (href === '#' + activeId) {
+        link.classList.add('active');
+      }
+    });
+  }
+
+  window.addEventListener('scroll', updateActive);
+  updateActive();
+})();
+</script>
+
 </body>
 </html>
