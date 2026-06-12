@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MT6877 Boot Chain Analysis — Consolidated Report</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+  h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
+  h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 32px 0 16px; }
+  h3 { font-size: 1.15em; margin: 24px 0 12px; }
+  h4 { font-size: 1em; margin: 16px 0 8px; }
+  p { margin: 0 0 12px; }
+  a { color: var(--accent); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .meta { color: var(--text2); font-size: 0.9em; margin-bottom: 24px; }
+  .meta span { display: inline-block; margin-right: 16px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.9em; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  th { background: var(--bg2); font-weight: 600; }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  td code, th code { font-size: 0.9em; }
+
+  /* Code blocks */
+  pre {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.45;
+    margin: 12px 0 20px;
+    tab-size: 4;
+  }
+  code {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.9em;
+    background: rgba(88,166,255,0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  /* Inline formatting */
+  strong { color: #fff; }
+  .severity-critical { color: var(--red); font-weight: 700; }
+  .severity-high { color: var(--orange); font-weight: 700; }
+  .severity-medium { color: var(--purple); font-weight: 700; }
+
+  /* ASCII diagrams */
+  .ascii {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.8em;
+    line-height: 1.3;
+    white-space: pre;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+  }
+
+  /* Lists */
+  ul, ol { margin: 8px 0 16px; padding-left: 24px; }
+  li { margin-bottom: 4px; }
+  ul ul, ol ol { margin: 4px 0; }
+
+  /* Section anchors */
+  .section-tag {
+    display: inline-block;
+    background: var(--accent);
+    color: #000;
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 10px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  /* Vuln blocks */
+  .vuln {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    margin: 16px 0;
+    background: var(--bg2);
+  }
+  .vuln h4 { margin-top: 0; }
+  .vuln-label { font-size: 0.8em; color: var(--text2); margin-bottom: 8px; }
+  .vuln-label span { margin-right: 16px; }
+
+  /* Patch diff */
+  .diff-orig { color: var(--red); }
+  .diff-new { color: var(--green); }
+
+  @media (max-width: 640px) {
+    .container { padding: 16px 12px; }
+    table { font-size: 0.8em; }
+    th, td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Mediatek MT6877 Boot Chain Analysis — Consolidated Report</h1>
+
+<div class="meta">
+<span>Device: Xiaomi ruby (Dimensity 920 / MT6877V)</span><br>
+<span>Generated: 2026-06-11</span>
+<span>Environment: WSL2 Ubuntu, arm-none-eabi-* toolchain, Python3, mtkclient</span><br>
+<span>Sources: ANALYSIS_PROGRESS.md, BOOTCHAIN_REPORT.md, RE_CONTEXT.md, VULNERABILITY_REPORT.md</span>
+</div>
+
+<hr>
+
+<h2>File Inventory</h2>
+
+<table>
+<thead><tr><th>File</th><th>Size</th><th>Role</th><th>Processor Mode</th></tr></thead>
+<tbody>
+<tr><td><code>brom_MT6877_MT6877V_MT8791N_959.bin</code></td><td>128 KB (131072 B)</td><td>BROM (Boot ROM in SoC silicon)</td><td>ARM (vectors), Thumb (main)</td></tr>
+<tr><td><code>preloader_ruby.bin</code></td><td>472756 B</td><td>Preloader (2nd-stage)</td><td>Thumb2</td></tr>
+<tr><td><code>preloader_ruby_patched.bin</code></td><td>472756 B</td><td>Patched preloader — call-site NOP</td><td>Thumb2</td></tr>
+<tr><td><code>preloader_ruby_patched_local.bin</code></td><td>472756 B</td><td>Patched preloader — function-return</td><td>Thumb2</td></tr>
+<tr><td><code>out/lk_a.bin</code></td><td>8 MB (8388608 B)</td><td>LK (Little Kernel) bootloader</td><td>ARM (init), Thumb2 (main)</td></tr>
+<tr><td><code>out/lk_a_patched.bin</code></td><td>8 MB</td><td>Patched LK — boot mode state overwrite</td><td>ARM/Thumb2</td></tr>
+<tr><td><code>out/seccfg.bin</code></td><td>8 MB</td><td>Security config partition (first 64 B used)</td><td>—</td></tr>
+<tr><td><code>out/gsort.bin</code></td><td>16 MB</td><td>Verified boot state partition (86 B non-zero)</td><td>—</td></tr>
+<tr><td><code>out/efuse.bin</code></td><td>512 KB</td><td>Efuse dump — ALL 0xAA (unprogrammed)</td><td>—</td></tr>
+<tr><td><code>out/otp.bin</code></td><td>—</td><td>OTP partition — ALL 0x00</td><td>—</td></tr>
+<tr><td><code>out/sec1.bin</code></td><td>2 MB</td><td>Bootloader lock state — ALL 0x00 (unlocked)</td><td>—</td></tr>
+<tr><td><code>out/vbmeta_a.bin</code></td><td>—</td><td>Android Verified Boot metadata</td><td>—</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Boot Chain Overview</h2>
+
+<p>Standard Mediatek 4-stage boot chain:</p>
+
+<div class="ascii">
+Power-on Reset
+  │
+  ▼
+STAGE 1: BROM (Boot ROM)
+  File: brom_MT6877_MT6877V_MT8791N_959.bin
+  Size: 128 KB  |  Location: SoC silicon ROM
+  Mode: ARM → Thumb
+  Role: Hardware init, boot source detection, preloader loading + verification
+  │
+  ▼
+STAGE 2: Preloader
+  File: preloader_ruby.bin
+  Size: 472756 B  |  Load addr: 0x100000
+  Mode: Thumb2
+  Role: DRAM init (LPDDR4x), flash partition detection, LK/boot image loading + RSA verification
+  │
+  ▼
+STAGE 3: LK (Little Kernel)
+  File: out/lk_a.bin
+  Size: 8 MB  |  Run addr: 0x48200000
+  Mode: ARM → Thumb2
+  Role: Display init, recovery/boot mode select, Android boot image loading, kernel jump
+  │
+  ▼
+STAGE 4: Linux Kernel (boot.img via LK)
+  Mode: AArch64 (ARM64)
+  Role: Android OS
+</div>
+
+<hr>
+
+<h2>STAGE 1: BROM (Boot ROM)</h2>
+
+<h3>Reset Vector &amp; Early Init</h3>
+
+<p>On power-on, ARM CPU executes at address 0x0 in ARM mode. BROM is memory-mapped at 0x0.</p>
+
+<p><strong>Reset vector (0x00):</strong> <code>B 0x54</code> — jump over exception vector table.</p>
+
+<p><strong>Exception vectors (0x04-0x3C):</strong> All infinite loops (undefined, SWI, prefetch abort, data abort — unused in BROM).</p>
+
+<p><strong>Context save (0x10-0x3C):</strong></p>
+<pre><code>0x10: LDR  r9, =0x00102B60    ; Context save area base
+0x14: STR  r0, [r9]           ; Save boot reason
+0x18: STR  r1, [r9, #4]       ; Boot config
+0x2C: MRC  p15, 0, r0, c5, c0, {0}  ; MPU region config
+0x30: MRC  p15, 0, r1, c6, c0, {0}  ; MPU region base
+0x3C: B    0xD9A8             ; Jump to main init</code></pre>
+
+<p>Saved context: r0 (boot device select: eMMC/UFS/SDMMC), r1-r4 (boot config), LR, CP15 c5/c6 (MPU region config for boot device window).</p>
+
+<h3>Main Init at 0x54</h3>
+
+<pre><code>0x54: MOV  r0, #0             ; Zero all working registers (r0-r12, SP, LR)
+0xB0: BL   0x11B54            ; early_hardware_init() — clocks, PLLs, watchdog
+0xE0: CPS  #0x13              ; Enter SVC mode
+0xE4: MOV  SP, =0x00013084    ; SVC stack pointer
+0xF0: BL   0x20C              ; secure_init() — enable secure features
+0xF4: BL   0x11BB0            ; clock_init() — system clock tree
+0xF8: BL   0x7B20             ; watchdog_disable()
+0xFC: BLX  0xDA70             ; Switch to Thumb mode → main_brom()</code></pre>
+
+<h3>Main BROM (Thumb mode, 0xDA70+)</h3>
+
+<ol>
+<li><strong>Boot source detection</strong> — reads HW registers for eMMC/UFS/COMBO (strings: &quot;EMMC_BOOT&quot; @ 0x12B4, &quot;UFS_BOOT&quot;, &quot;COMBO_BOOT&quot;)</li>
+<li><strong>Storage controller init</strong></li>
+<li><strong>TIMESTMP header check</strong> — validate flash layout</li>
+<li><strong>Preloader loading</strong> — scans for GFH header (<code>MMM\x01</code> magic), parses GFH_FILE_INFO, copies to SRAM at 0x100000, verifies signature via embedded public key</li>
+<li><strong>USB Download Mode</strong> — if key combo pressed or boot fails:<br>
+&nbsp;&nbsp;- &quot;USBDL&quot; mode (strings at 0x3FB0)<br>
+&nbsp;&nbsp;- ACM USB virtual COM port modes: &quot;ACM COMMU&quot;, &quot;ACM DATA&quot;, &quot;ACM VIRTUALCOM&quot;<br>
+&nbsp;&nbsp;- Waits for signed Download Agent (DA) via USB</li>
+<li><strong>Jump to preloader</strong> — clear caches, BX to preloader entry at 0x10066C</li>
+</ol>
+
+<p><strong>BROM does NOT do:</strong> DRAM init, filesystem parsing, boot image verification.</p>
+
+<hr>
+
+<h2>STAGE 2: Preloader</h2>
+
+<h3>Loading &amp; GFH Header Chain</h3>
+
+<p>BROM loads <code>preloader_ruby.bin</code> from boot partition via raw block reads. File starts with GFH headers:</p>
+
+<table>
+<thead><tr><th>Offset</th><th>Type</th><th>Size</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>0x000</td><td>GFH_FILE_INFO (type 0)</td><td>56 B</td><td>Image descriptor</td></tr>
+<tr><td>0x038</td><td>GFH_BL_INFO (type 1)</td><td>12 B</td><td>Bootloader info/version</td></tr>
+<tr><td>0x044</td><td>GFH_BL_SEC_KEY (type 7)</td><td>100 B</td><td>RSA public key (data at 0x50)</td></tr>
+<tr><td>0x0A8</td><td>GFH_ATTEST (type 2)</td><td>20 B</td><td>Attestation data</td></tr>
+<tr><td>0x0BC</td><td>GFH_BL_LOAD (type 8)</td><td>48 B</td><td>Load segment descriptors</td></tr>
+<tr><td>0x0EC</td><td>GFH_BL_ATTR (type 18)</td><td>20 B</td><td>Attributes (debug flags?)</td></tr>
+</tbody>
+</table>
+
+<p><strong>GFH_FILE_INFO parsed:</strong></p>
+<pre><code>magic:       MMM\x01
+name:        FILE_INFO
+flash_type:  0x0F00          ; eMMC boot partition
+sig_len:     0x20 (32)       ; SHA-256 hash length
+load_addr:   0x100000
+entry:       0x66C           ; Entry = load_addr + 0x66C = 0x10066C</code></pre>
+
+<p><strong>GFH_BL_SEC_KEY</strong> contains embedded RSA public key for preloader signature verification. If verification fails, BROM falls back to USB download mode.</p>
+
+<h3>File Layout</h3>
+
+<pre><code>0x000-0x0FF:  GFH headers
+0x100-0x26C:  ARM startup code
+0x300-0x340:  GFH data region
+0x100-0x57FFF: Thumb2 code
+0x58000-0x6F000: strings / rodata
+0x72000-0x73634: GOT (544 string references via LDR+ADD GOT-based pattern)</code></pre>
+
+<h3>Execution Entry (0x10066C)</h3>
+
+<ul>
+<li>Set up stack pointer (SRAM at ~0x200000+)</li>
+<li>Initialize PLLs, DRAM controller, pinmux</li>
+<li>Switch to Thumb2 mode</li>
+</ul>
+
+<h3>DRAM Initialization</h3>
+
+<p>Primary job: init LPDDR4x via PMIC/SPI bus, calibrate timing, enable channels.</p>
+
+<p>After DRAM init:</p>
+<pre><code>0x100000-0x17B000  Preloader code
+0x200000+          Stack/heap/BSS
+0x40000000+        DRAM available</code></pre>
+
+<h3>Partition Table Parsing</h3>
+
+<p>Reads GPT from boot device (LBA 1 header, LBA 2-33 entries). Key partitions:</p>
+<pre><code>boot      → Linux kernel + ramdisk
+recovery  → Recovery kernel + ramdisk
+lk        → LK bootloader
+vbmeta    → Verified boot metadata
+tee       → Trusted Execution Environment</code></pre>
+
+<h3>Image Loading and Verification</h3>
+
+<p><strong>Key Functions:</strong></p>
+<table>
+<thead><tr><th>Function</th><th>Address</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td>preloader_main</td><td>0x343C0</td><td>Entry point</td></tr>
+<tr><td>partition init</td><td>0x45CC0</td><td>Partition initialization</td></tr>
+<tr><td>partition loader</td><td>0xD750</td><td>Loads partition images (calls RSA verify at 0xD7E0)</td></tr>
+<tr><td>image loader</td><td>0x3E780</td><td>Main image loader (calls 0x50CD4 @ 0x3E66C, 0x50F94 @ 0x3E848)</td></tr>
+<tr><td>SHA256</td><td>0x50B14</td><td>SHA-256 hash computation</td></tr>
+<tr><td>RSA verify</td><td>0x51B98</td><td>RSA-2048 signature verify</td></tr>
+<tr><td>Hash compare</td><td>0x51D48</td><td>Hash comparison</td></tr>
+<tr><td>printf</td><td>0x43B94</td><td>Debug output</td></tr>
+<tr><td>assert/panic</td><td>0x3F754</td><td>Error handling</td></tr>
+<tr><td>malloc</td><td>0x47494</td><td>Memory allocation</td></tr>
+<tr><td>memcpy/memset</td><td>0x47298, 0x472A8, 0x472BE</td><td>Memory operations</td></tr>
+</tbody>
+</table>
+
+<p><strong>Verification call chain:</strong></p>
+<pre><code>partition_loader (0xD750)
+  → image_loader (0x3E780)
+    → RSA_verify_main @ 0x50CD4 (RSA-2048 + SHA-256)
+    → image_auth_check @ 0x50F94 (SHA-256 + hash compare)
+    → Additional verifications for TEE (0x512B8-0x51400)
+    → Firmware hash check (0x51118-0x5128A)</code></pre>
+
+<p><strong>RSA_verify_main @ 0x50CD4 flow:</strong></p>
+<pre><code>push.w {r4-r7,sb,sl,fp,lr}; sub sp,#0x48
+  → BL 0x461E0 (crypto init)
+  → BL 0x3294C, 0x461FA (data loading/parsing)
+  → BL 0x50B14 (SHA-256 hash)
+  → BL 0x5187C (crypto op)
+  → BL 0x50A58, 0x50AC4 (verification steps)
+  → BL 0x51B98 (RSA signature verify)
+  → BL 0x51D48 (hash compare)
+  → CMP R0,#0; IT NE; MOVNE R7,R3
+  → return r7 (=0 on success)</code></pre>
+
+<p>Error branches at 0x50E36, 0x50E9C, 0x50EAC, 0x50EEE, 0x50F04, 0x50F18 → 0x50F32.</p>
+
+<p><strong>image_auth_check @ 0x50F94 flow:</strong></p>
+<pre><code>push {r4-r7,lr}; sub sp,#0x2c
+  → BL 0x50B14 (SHA-256)
+  → BL 0x51D48 (hash compare)
+  → CBNZ R0,0x50FD6 → "[%s] img auth fail(0x%x)"
+  → CBZ R0,0x50FE6 → "[%s] %s" "Verify Pass"
+  → return r4 (=0 on success)</code></pre>
+
+<h3>Jump to LK</h3>
+
+<p>After verification: parse LK BR header, copy to 0x48200000, set boot args, clean caches, branch to LK entry.</p>
+
+<hr>
+
+<h2>STAGE 3: LK (Little Kernel)</h2>
+
+<h3>LK Binary Format (Mediatek BR Header)</h3>
+
+<table>
+<thead><tr><th>Offset</th><th>Size</th><th>Field</th><th>Value</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>0x000</td><td>4</td><td>magic1</td><td>0x58881688</td><td>BR header magic</td></tr>
+<tr><td>0x004</td><td>4</td><td>total_size</td><td>0x1BF668 (1.83 MB)</td><td>Code portion size</td></tr>
+<tr><td>0x008</td><td>8</td><td>signature</td><td>&quot;lk\0\0\0\0\0\0&quot;</td><td>Boot image identifier</td></tr>
+<tr><td>0x030</td><td>4</td><td>magic2</td><td>0x58891689</td><td>Second magic</td></tr>
+<tr><td>0x034</td><td>4</td><td>load_address</td><td>0x200</td><td>Offset in destination</td></tr>
+<tr><td>0x038</td><td>4</td><td>flags</td><td>0x1</td><td>BR_RAW (raw binary)</td></tr>
+<tr><td>0x044</td><td>4</td><td>entry_point</td><td>0x10</td><td>Entry = load_addr + entry</td></tr>
+<tr><td>0x048-0x1FF</td><td>—</td><td>padding</td><td>0xFFFF</td><td>Gap to code start</td></tr>
+<tr><td>0x200+</td><td>—</td><td>ARM code</td><td>—</td><td>Executable starts here</td></tr>
+</tbody>
+</table>
+
+<p>Loaded entry: 0x48200000 + 0x10 = 0x48200010 → relocated to 0x48200080.</p>
+
+<h3>Entry and Self-Relocation (0x200)</h3>
+
+<pre><code>; Exception handlers
+0x200: B    0x224           ; Reset vector
+0x204: B    0x25620         ; Undefined instruction
+0x208: B    0x2563C         ; SWI
+0x20C: B    0x25658         ; Prefetch abort
+0x210: B    0x25674         ; Data abort
+0x214: B    0x25690         ; IRQ
+0x218: B    0x25694         ; FIQ
+0x21C: B    0x256F4         ; Reserved
+
+; Real entry
+0x224: LDR  r6, =0x48200020 ; Boot source storage
+       STR  r4, [r6]        ; Save boot source from preloader
+       MRC  p15, 0, r0, c1, c0, {0}  ; Read SCTLR
+       BIC  r0, r0, #0xB000 ; Clear I-cache + MMU bits
+       BIC  r0, r0, #5      ; Clear M (MMU) + C (D-cache)
+       ORR  r0, r0, #2      ; Set A (alignment check)
+       MCR  p15, 0, r0, c1, c0, {0}  ; Write SCTLR
+       ; Self-relocation if loaded at wrong address
+       ; Copy 0x48200000-0x483BF668 to 0x48200000
+       BX   0x48200080      ; Jump to relocated code</code></pre>
+
+<h3>Stack Setup at 0x48200080</h3>
+
+<p>All modes share stack area at 0x483C38EC (except IRQ):</p>
+
+<table>
+<thead><tr><th>Mode</th><th>Stack Pointer</th></tr></thead>
+<tbody>
+<tr><td>IRQ (0x12)</td><td>0x483C38EC (separate)</td></tr>
+<tr><td>FIQ (0x11)</td><td>Reuses SVC</td></tr>
+<tr><td>Abort (0x17)</td><td>Reuses SVC</td></tr>
+<tr><td>Undefined (0x1B)</td><td>Reuses SVC</td></tr>
+<tr><td>System (0x1F)</td><td>Reuses SVC</td></tr>
+<tr><td>Supervisor (0x13)</td><td>Reuses SVC</td></tr>
+</tbody>
+</table>
+
+<h3>BSS Zero → lk_main</h3>
+
+<pre><code>LDR  r0, =0x48338D60  ; BSS start
+LDR  r1, =0x48338D60  ; BSS end (start = end? possibly wrong)
+LDR  r2, =0x483BF668  ; Actual end
+; BSS zero loop
+BLX  0x4827AEC        ; lk_main() — enters C
+B    0x4820314        ; Infinite loop</code></pre>
+
+<h3>LK Main (0x4827AEC) — C Runtime</h3>
+
+<ol>
+<li><strong>Architecture init:</strong> MMU + page tables, D-cache enable, TLB maintenance</li>
+<li><strong>Platform init (MT6877-specific):</strong> UART console, clock tree, GPIO/pinmux for display/buttons</li>
+<li><strong>Display init:</strong> Panel, backlight, framebuffer (boot logo)</li>
+<li><strong>Boot device detection:</strong> Reads PMIC/registers for boot reason:<br>
+&nbsp;&nbsp;- Normal boot<br>
+&nbsp;&nbsp;- Recovery (vol up + power)<br>
+&nbsp;&nbsp;- Fastboot (vol down + power)<br>
+&nbsp;&nbsp;- Meta mode</li>
+<li><strong>Boot image loading:</strong> GPT locate → read Android boot image header v3/v4 → load kernel (Image.gz-dtb) + ramdisk to DRAM → pass DTB</li>
+<li><strong>Kernel boot:</strong> ATAGs/device tree setup → AArch64 mode → branch to kernel entry</li>
+</ol>
+
+<hr>
+
+<h2>Memory Map</h2>
+
+<pre><code>Region          Start           End             Used By
+──────          ─────           ───             ───────
+BROM (in SoC)   0x00000000      0x0001FFFF      BROM code (128 KB)
+SRAM stack      0x00013084      0x00013150      BROM stacks (IRQ/SVC)
+SRAM context    0x00102B60      0x00102B80      BROM context save
+Preloader       0x00100000      0x001736B4      Preloader (loaded by BROM)
+DRAM stack      0x20000000+                     Preloader/LK stacks/bss/heap
+LK code         0x48200000      0x483BF668      LK bootloader
+DRAM heap       0x40000000+                     Available DRAM (up to 12 GB)</code></pre>
+
+<hr>
+
+<h2>Patch Analysis</h2>
+
+<h3>Preloader: Two Patching Strategies</h3>
+
+<p><strong>Method A — Call-site NOP (<code>preloader_ruby_patched.bin</code>):</strong> 12 bytes, 3 sites.</p>
+
+<table>
+<thead><tr><th>Location</th><th>Original</th><th>Patched</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td>0x3E66C</td><td><code>bl 0x50CD4</code> (RSA verify)</td><td><code>nop; nop</code></td><td>Removes RSA verify call from image loader</td></tr>
+<tr><td>0x3E68C</td><td><code>bl 0x522C0</code> (check fn)</td><td><code>nop; nop</code></td><td>Removes check call from image loader</td></tr>
+<tr><td>0x4618E</td><td><code>ubfx r0,r0,#1,#1</code> (bit test)</td><td><code>movs r0,#0; nop</code></td><td>Partition init returns 0 (success)</td></tr>
+</tbody>
+</table>
+
+<p><strong>Method B — Function-return (<code>preloader_ruby_patched_local.bin</code>):</strong> 8 bytes, 2 sites.</p>
+
+<table>
+<thead><tr><th>Location</th><th>Original</th><th>Patched</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td>0x50CD4</td><td><code>2d e9 f0 4e</code> (push.w {r4-r7,sb,sl,fp,lr})</td><td><code>00 20 70 47</code> (movs r0,#0; bx lr)</td><td>RSA_verify_main returns 0 immediately</td></tr>
+<tr><td>0x50F94</td><td><code>f0 b5 8b b0</code> (push {r4-r7,lr}; sub sp,#0x2c)</td><td><code>00 20 70 47</code> (movs r0,#0; bx lr)</td><td>image_auth_check returns 0 immediately</td></tr>
+</tbody>
+</table>
+
+<p>Both achieve same result: <strong>no signature verification on any loaded image</strong>.</p>
+
+<p><strong>Relationship:</strong> RE_CONTEXT.md describes patches at 0x50CD4/0x50F94 (matching patched_local), but ANALYSIS_PROGRESS.md labels the &quot;patched&quot; file uses different sites (0x3E66C/0x3E68C/0x4618E). This suggests:</p>
+<ul>
+<li><code>patched_local</code> was first attempt (function-level bypass, more obvious, smaller footprint: 8 B)</li>
+<li><code>patched</code> was refined (call-site bypass, subtler: 12 B)</li>
+</ul>
+
+<h3>LK Boot Mode State Overwrite (<code>lk_a_patched.bin</code>)</h3>
+
+<p>11 bytes changed at 0x273B4-0x27400:</p>
+
+<pre><code>; Original (0x273B4):
+CMP  r4, #4
+IT   EQ
+STREQ.W  r4, [r8]           ; Store 4 when r4==4
+BEQ  0x273EA
+...
+; At 0x27400:
+MOVS r3, #3
+STR.W r3, [r8]              ; Store 3 in other path
+
+; Patched:
+MOVS r3, #0
+STR.W r3, [r8]              ; Always store 0
+B    0x273EA
+...
+; At 0x27400:
+MOVS r3, #0
+STR.W r3, [r8]              ; Store 0 instead of 3</code></pre>
+
+<p><strong>Effect:</strong> Values 4 and 3 stored to <code>[r8]</code> are replaced with 0. <code>[r8]</code> likely controls boot mode lock or verified boot state (green/orange/red). Neutralizes a lock/security check in boot mode selection.</p>
+
+<hr>
+
+<h2>Vulnerability Surface</h2>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 1</span> GCPU Blacklist Bypass (Hardware Crypto Engine)</h4>
+<div class="vuln-label"><span><strong>Location:</strong> BROM — GCPU @ 0x10050000</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Type:</strong> Hardware security range enforcement bypass</p>
+<p>BROM implements memory blacklist preventing reads from sensitive regions (BROM, preloader SRAM, security registers). Managed through GCPU registers. Blacklist registers writable through same AES-CBC interface used for crypto — no access control separation.</p>
+<p><strong>Exploit:</strong> Write 0 to blacklist registers via AES-CBC setup → full memory R/W.</p>
+<p><strong>Impact:</strong> Full BROM dump, preloader dump from SRAM, R/W to ALL memory.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 2</span> Kamakiri — USB Control Transfer Overflow</h4>
+<div class="vuln-label"><span><strong>Location:</strong> BROM — USB CDC ACM interface</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Type:</strong> USB control transfer buffer overflow + register manipulation</p>
+<p>Three variants:</p>
+<ul>
+<li><strong>v1:</strong> Write to watchdog scratch reg (0x10007050) → overwrite send_ptr → trigger SEND_CERT (cmd 0xE0) → code exec in BROM context</li>
+<li><strong>v2:</strong> USB CDC line coding ctrl_transfer — no length validation on descriptor copy → stack buffer overflow → overwrite adjacent data</li>
+<li><strong>v3 (KamakiriPL):</strong> Preloader-level USB CDC line coding overflow → bypass auth state; also <code>bypass_2nd_da()</code> for DA auth bypass</li>
+</ul>
+<p><strong>Impact:</strong> Arbitrary payload in BROM context, preloader/BROM dump, bypass 1st-stage download auth.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 3</span> HeapBait — XML Parser Heap Overflow (DA)</h4>
+<div class="vuln-label"><span><strong>Location:</strong> Download Agent — XML command parser</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Type:</strong> Heap buffer overflow (allocated size vs. read size mismatch)</p>
+<p>When DA handles <code>CMD:SECURITY</code> with <code>allinone_signature</code>:</p>
+<ol>
+<li>Parses XML <code>filename</code> attribute → allocates buffer based on ADVERTISED filename size</li>
+<li>Reads file data from USB using PACKET SIZE (0x2000), NOT allocated size</li>
+<li>Buffer allocated: 0x1400 bytes; data per chunk: 0x2000 bytes → overflow: 0x10 bytes</li>
+</ol>
+<p><strong>Exploit:</strong> 3-stage: upload shellcode as signature → trigger overflow with 5000-char filename → corrupted alloc header causes DPC callback overwrite → shellcode exec with DA privileges → patch security policies (hash binding, verify policy, download policy, SBC, SLA).</p>
+<p><strong>Self-test values (ARM64 on MT6886+):</strong></p>
+<pre><code>shellcode_addr = 0x44C7F100, heap_base = 0x4007F100, dpc_addr = 0x40070028</code></pre>
+<p><strong>Check:</strong> DA patched if contains &quot;Dest XML file name buffer overflow&quot;.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 4</span> Efuse/OTP Not Programmed</h4>
+<div class="vuln-label"><span><strong>Location:</strong> Efuses @ 0x11F10000, OTP partition</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Type:</strong> Missing permanent security configuration</p>
+<p><code>efuse.bin</code>: ALL 0xAA (unprogrammed erase state). <code>otp.bin</code>: ALL 0x00.</p>
+<p>Missing critical efuses: secure boot enable, JTAG disable, OEM key hash, boot config. Device has <strong>no hardware root of trust</strong> — software security only.</p>
+<p><strong>Impact:</strong> Any software bypass is PERMANENT. Cannot be locked against after boot. All efuses R/W via GCPU (Vuln 1).</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 5</span> Security Partitions Rewritable</h4>
+<div class="vuln-label"><span><strong>Location:</strong> Flash partitions seccfg, gsort, sec1, vbmeta_*</span> <span class="severity-high">HIGH</span></div>
+<p><strong>Type:</strong> Software-enforced security stored on rewritable media</p>
+<ul>
+<li><strong>seccfg:</strong> 64 B used out of 8 MB — magic &quot;MMMM&quot;, flags=0x01 (enabled?), 32-byte hash/secret. Entire partition zeroable.</li>
+<li><strong>gsort:</strong> Minimal data with repeating patterns at 0x70/0x78 (rollback counter?). Erased patterns throughout.</li>
+<li><strong>sec1:</strong> Completely zero (2 MB) — no lock state = bootloader unlocked.</li>
+<li><strong>vbmeta:</strong> Standard AVB header — irrelevant if bootloader patched.</li>
+</ul>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 6</span> Preloader RSA Verify NOP (Confirmed)</h4>
+<div class="vuln-label"><span><strong>Location:</strong> preloader_ruby.bin @ 0x50CD4, 0x50F94, 0x3E66C, 0x3E68C</span> <span class="severity-high">HIGH</span></div>
+<p><strong>Type:</strong> RSA signature verification bypass (two methods)</p>
+<p>Both methods confirmed working: function-return patch (return 0) and call-site NOP (skip calls). See Patch Analysis section for byte-level details.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">VULN 7</span> LK Boot Mode State Overwrite</h4>
+<div class="vuln-label"><span><strong>Location:</strong> out/lk_a.bin @ 0x273B4, 0x27400</span> <span class="severity-medium">MEDIUM</span></div>
+<p><strong>Type:</strong> Security state register overwrite</p>
+<p>Values 4 and 3 stored to <code>[r8]</code> replaced with 0 — neutralizes locked/enforced boot states. See Patch Analysis section for details.</p>
+</div>
+
+<hr>
+
+<h2>Security Architecture</h2>
+
+<ol>
+<li><strong>BROM → Preloader:</strong> RSA-2048 + SHA-256 signature check via key in GFH_BL_SEC_KEY. Fail → USB download mode (requires authenticated DA).</li>
+<li><strong>Preloader → LK/boot:</strong> Same RSA-2048 + SHA-256. Each image (lk, boot, recovery, tee) individually verified.</li>
+<li><strong>LK → Kernel:</strong> Android Verified Boot (AVB) — vbmeta hash tree + rollback index. LK passes device tree with verified boot state.</li>
+<li><strong>Lock/unlock state:</strong> Preloader checks bootloader lock state (sec1 partition). Locked = signed images only. Unlocked = warning screen + any image boots.</li>
+<li><strong>SLA/DAA auth:</strong> Download mode requires SLA (challenge-response with OEM key) + DAA (signed DA binary).</li>
+</ol>
+
+<h3>Patch Effects on Security</h3>
+
+<table>
+<thead><tr><th>Patch</th><th>What it bypasses</th><th>Impact</th></tr></thead>
+<tbody>
+<tr><td>preloader 0x50CD4 (or 0x3E66C)</td><td>RSA signature verify</td><td>Any unsigned LK/boot loads</td></tr>
+<tr><td>preloader 0x50F94 (or 0x3E68C)</td><td>Image auth hash check</td><td>Second verification layer</td></tr>
+<tr><td>preloader 0x4618E</td><td>Partition init flag</td><td>Forces success</td></tr>
+<tr><td>LK 0x273B4/0x27400</td><td>Boot mode lock check</td><td>Disables secure boot enforcement</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Attack Surface Summary</h2>
+
+<table>
+<thead><tr><th>#</th><th>Vulnerability</th><th>Stage</th><th>Access Required</th><th>Complexity</th><th>Impact</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>GCPU Blacklist Bypass</td><td>BROM</td><td>USB + DA</td><td>Medium</td><td>Full memory R/W</td></tr>
+<tr><td>2</td><td>Kamakiri USB Overflow</td><td>BROM</td><td>USB</td><td>Low</td><td>Arbitrary code in BROM</td></tr>
+<tr><td>3</td><td>HeapBait XML Overflow</td><td>DA</td><td>USB + signed DA</td><td>High</td><td>Full flash R/W</td></tr>
+<tr><td>4</td><td>Efuse/OTP Unprogrammed</td><td>Hardware</td><td>Any access</td><td>None</td><td>No permanent security</td></tr>
+<tr><td>5</td><td>Secpart Rewritable</td><td>Bootloader</td><td>DA access</td><td>Low</td><td>Revert security state</td></tr>
+<tr><td>6</td><td>RSA Verify NOP</td><td>Preloader</td><td>Preloader modify</td><td>Low</td><td>Unsigned images boot</td></tr>
+<tr><td>7</td><td>LK State Overwrite</td><td>LK</td><td>LK modify</td><td>Low</td><td>Boot mode enforcement off</td></tr>
+</tbody>
+</table>
+
+<h2>Recommended Attack Path (Lowest Friction)</h2>
+
+<pre><code>1. USB connection to device in BROM mode (vol up + power)
+2. Kamakiri (Vuln 2) → BROM code execution → dump BROM, verify blacklist addresses
+3. GCPU bypass (Vuln 1) → disable blacklist → full memory access
+4. Dump preloader from SRAM (0x200000-0x240000)
+5. Apply preloader patches (Vuln 6): NOP RSA calls
+6. Write patched preloader to boot partition
+7. Device boots ANY unsigned boot image</code></pre>
+
+<p><strong>If HeapBait payload exists for MT6877:</strong></p>
+<pre><code>1. Send signed DA → load HeapBait → XML overflow (Vuln 3)
+2. DA security patch: hash binding, verify policy, download policy all → return 0
+3. Direct flash write → replace LK, boot, recovery with unsigned versions</code></pre>
+
+<hr>
+
+<h2>Cold Storage Note</h2>
+
+<p>Efuse state (all 0xAA) is the single most critical finding:</p>
+<ul>
+<li>Device <strong>never</strong> had hardware secure boot enabled</li>
+<li>Full software restore to stock <strong>cannot</strong> enable it</li>
+<li>OEM shipped with bootloader permanently unlockable</li>
+<li>Any exploit used once survives future software updates</li>
+<li>OTA updates rewrite flash with locked state, but efuses unblown → software locks bypassable again via same exploits</li>
+</ul>
+
+</div>
+</body>
+</html>
