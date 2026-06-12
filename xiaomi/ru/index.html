@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<meta property="og:title" content="Анализ цепочки загрузки MT6877 — Сводный отчёт">
+<meta property="og:description" content="Xiaomi ruby (Dimensity 920) цепочка загрузки: BROM → Preloader → LK → Kernel. 7 уязвимостей, состояние efuse, анализ патчей и векторы атак.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Xiaomi MT6877 RE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Анализ цепочки загрузки MT6877 — Сводный отчёт">
+<meta name="twitter:description" content="Xiaomi ruby (Dimensity 920) цепочка загрузки: BROM → Preloader → LK → Kernel. 7 уязвимостей, состояние efuse, анализ патчей и векторы атак.">
+<title>Анализ цепочки загрузки MT6877 — Сводный отчёт</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --sidebar-w: 260px;
+  }
+  .ai-banner {
+    background: #d29922;
+    color: #0d1117;
+    text-align: center;
+    padding: 10px 20px;
+    font-size: 0.9em;
+    font-weight: 600;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    z-index: 10000;
+    border-bottom: 2px solid #f0c040;
+    line-height: 1.4;
+  }
+  .ai-banner strong { color: #000; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    display: flex;
+    min-height: 100vh;
+    padding-top: 56px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    position: fixed;
+    top: 56px; left: 0;
+    width: var(--sidebar-w);
+    height: calc(100vh - 56px);
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 0;
+    z-index: 100;
+  }
+  .sidebar-title {
+    font-size: 0.85em;
+    font-weight: 700;
+    color: var(--accent);
+    padding: 0 16px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .sidebar a {
+    display: block;
+    padding: 6px 16px;
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 0.82em;
+    transition: background 0.15s, color 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .sidebar a:hover,
+  .sidebar a:focus {
+    background: rgba(88,166,255,0.08);
+    color: var(--text);
+  }
+  .sidebar a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(88,166,255,0.06);
+  }
+  .sidebar-section {
+    margin-top: 4px;
+  }
+  .sidebar-section a { padding-left: 24px; font-size: 0.78em; }
+  .sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 62px; left: 12px;
+    z-index: 10001;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 1.2em;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .sidebar-overlay { display: none; }
+
+  /* Main content */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    max-width: 960px;
+    padding: 40px 40px 60px;
+  }
+
+  .container { width: 100%; }
+
+  h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
+  h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 40px 0 16px; }
+  h3 { font-size: 1.15em; margin: 28px 0 12px; }
+  h4 { font-size: 1em; margin: 16px 0 8px; }
+  p { margin: 0 0 12px; }
+  a { color: var(--accent); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .meta { color: var(--text2); font-size: 0.9em; margin-bottom: 24px; }
+  .meta span { display: inline-block; margin-right: 16px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.9em; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  th { background: var(--bg2); font-weight: 600; }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  td code, th code { font-size: 0.9em; }
+
+  /* Code blocks */
+  pre {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.45;
+    margin: 12px 0 20px;
+    tab-size: 4;
+  }
+  code {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.9em;
+    background: rgba(88,166,255,0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  strong { color: #fff; }
+  .severity-critical { color: var(--red); font-weight: 700; }
+  .severity-high { color: var(--orange); font-weight: 700; }
+  .severity-medium { color: var(--purple); font-weight: 700; }
+
+  .ascii {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.8em;
+    line-height: 1.3;
+    white-space: pre;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+  }
+
+  ul, ol { margin: 8px 0 16px; padding-left: 24px; }
+  li { margin-bottom: 4px; }
+  ul ul, ol ol { margin: 4px 0; }
+
+  .section-tag {
+    display: inline-block;
+    background: var(--accent);
+    color: #000;
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 10px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  .vuln {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    margin: 16px 0;
+    background: var(--bg2);
+  }
+  .vuln h4 { margin-top: 0; }
+  .vuln-label { font-size: 0.8em; color: var(--text2); margin-bottom: 8px; }
+  .vuln-label span { margin-right: 16px; }
+
+  /* Downloads section */
+  .download-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .download-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .download-card .fn {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.82em;
+    word-break: break-all;
+  }
+  .download-card .sz {
+    font-size: 0.78em;
+    color: var(--text2);
+  }
+  .download-card .desc {
+    font-size: 0.82em;
+    color: var(--text);
+    flex: 1;
+  }
+  .download-btn {
+    display: inline-block;
+    background: var(--accent);
+    color: #000;
+    font-weight: 600;
+    font-size: 0.82em;
+    padding: 6px 16px;
+    border-radius: 4px;
+    text-decoration: none;
+    text-align: center;
+    transition: opacity 0.15s;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+  .download-btn:hover { opacity: 0.85; }
+
+  /* Responsive */
+  @media (max-width: 800px) {
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.25s;
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 99;
+    }
+    .sidebar-overlay.open { display: block; }
+    .sidebar-toggle { display: block; }
+    .main {
+      margin-left: 0;
+      padding: 60px 16px 40px;
+    }
+    table { font-size: 0.8em; }
+    th, td { padding: 6px 8px; }
+    .download-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="ai-banner">
+  <strong>⚠ Контент создан ИИ</strong><br>
+  Вся статья создана ИИ. Вся информация получена через анализ с использованием реальных инструментов (дизассемблеры, hex-редакторы, mtkclient и т.д.) на реальных дампах прошивки.
+</div>
+
+<button class="sidebar-toggle" id="sidebarToggle" aria-label="Переключить навигацию">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-title">Разделы отчёта</div>
+  <a href="#top" onclick="closeSidebar()">Начало</a>
+  <a href="#inventory" onclick="closeSidebar()">Состав файлов</a>
+  <a href="#overview" onclick="closeSidebar()">Обзор цепочки загрузки</a>
+  <div class="sidebar-section">
+    <a href="#stage1" onclick="closeSidebar()">Этап 1: BROM</a>
+    <a href="#stage2" onclick="closeSidebar()">Этап 2: Preloader</a>
+    <a href="#stage3" onclick="closeSidebar()">Этап 3: LK</a>
+  </div>
+  <a href="#memmap" onclick="closeSidebar()">Карта памяти</a>
+  <a href="#patches" onclick="closeSidebar()">Анализ патчей</a>
+  <a href="#vulns" onclick="closeSidebar()">Поверхность уязвимостей</a>
+  <a href="#security" onclick="closeSidebar()">Архитектура безопасности</a>
+  <a href="#attacksurf" onclick="closeSidebar()">Поверхность атаки</a>
+  <a href="#attackpath" onclick="closeSidebar()">Вектор атаки</a>
+  <a href="#coldstorage" onclick="closeSidebar()">Примечание: Cold Storage</a>
+  <a href="#downloads" onclick="closeSidebar()" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;color:var(--green);font-weight:600;">Загрузки</a>
+</nav>
+
+<div class="main" id="top">
+<div class="container">
+
+<h1>Анализ цепочки загрузки Mediatek MT6877 — Сводный отчёт</h1>
+
+<div class="meta">
+<span>Устройство: Xiaomi ruby (Dimensity 920 / MT6877V)</span><br>
+<span>Создан: 2026-06-11</span>
+<span>Среда: WSL2 Ubuntu, arm-none-eabi-* toolchain, Python3, mtkclient</span><br>
+<span>Источники: ANALYSIS_PROGRESS.md, BOOTCHAIN_REPORT.md, RE_CONTEXT.md, VULNERABILITY_REPORT.md</span>
+</div>
+
+<hr>
+
+<h2 id="inventory">Состав файлов</h2>
+
+<table>
+<thead><tr><th>Файл</th><th>Размер</th><th>Роль</th><th>Режим процессора</th></tr></thead>
+<tbody>
+<tr><td><code>brom_MT6877_MT6877V_MT8791N_959.bin</code></td><td>128 КБ (131072 B)</td><td>BROM (Boot ROM в кремнии SoC)</td><td>ARM (векторы), Thumb (основной)</td></tr>
+<tr><td><code>preloader_ruby.bin</code></td><td>472756 B</td><td>Preloader (второй этап)</td><td>Thumb2</td></tr>
+<tr><td><code>preloader_ruby_patched.bin</code></td><td>472756 B</td><td>Патченый preloader — NOP в местах вызова</td><td>Thumb2</td></tr>
+<tr><td><code>preloader_ruby_patched_local.bin</code></td><td>472756 B</td><td>Патченый preloader — возврат из функции</td><td>Thumb2</td></tr>
+<tr><td><code>lk_a.bin</code></td><td>8 МБ (8388608 B)</td><td>LK (Little Kernel) загрузчик</td><td>ARM (инициализация), Thumb2 (основной)</td></tr>
+<tr><td><code>lk_a_patched.bin</code></td><td>8 МБ</td><td>Патченый LK — перезапись состояния режима загрузки</td><td>ARM/Thumb2</td></tr>
+<tr><td><code>out/seccfg.bin</code></td><td>8 МБ</td><td>Раздел конфигурации безопасности (первые 64 Б используются)</td><td>—</td></tr>
+<tr><td><code>out/gsort.bin</code></td><td>16 МБ</td><td>Раздел состояния верифицированной загрузки (86 Б не нулевые)</td><td>—</td></tr>
+<tr><td><code>out/efuse.bin</code></td><td>512 КБ</td><td>Дамп Efuse — ВСЕ 0xAA (не запрограммированы)</td><td>—</td></tr>
+<tr><td><code>out/otp.bin</code></td><td>—</td><td>Раздел OTP — ВСЕ 0x00</td><td>—</td></tr>
+<tr><td><code>out/sec1.bin</code></td><td>2 МБ</td><td>Состояние блокировки загрузчика — ВСЕ 0x00 (разблокирован)</td><td>—</td></tr>
+<tr><td><code>out/vbmeta_a.bin</code></td><td>—</td><td>Метаданные Android Verified Boot</td><td>—</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2 id="overview">Обзор цепочки загрузки</h2>
+
+<p>Стандартная 4-этапная цепочка загрузки Mediatek:</p>
+
+<div class="ascii">
+Power-on Reset
+  │
+  ▼
+ЭТАП 1: BROM (Boot ROM)
+  Файл: brom_MT6877_MT6877V_MT8791N_959.bin
+  Размер: 128 КБ  |  Расположение: ПЗУ SoC
+  Режим: ARM → Thumb
+  Роль: Инициализация железа, определение источника загрузки, загрузка + верификация preloader
+  │
+  ▼
+ЭТАП 2: Preloader
+  Файл: preloader_ruby.bin
+  Размер: 472756 B  |  Адрес загрузки: 0x100000
+  Режим: Thumb2
+  Роль: Инициализация DRAM (LPDDR4x), обнаружение разделов flash, загрузка LK/образов + RSA верификация
+  │
+  ▼
+ЭТАП 3: LK (Little Kernel)
+  Файл: lk_a.bin
+  Размер: 8 МБ  |  Адрес запуска: 0x48200000
+  Режим: ARM → Thumb2
+  Роль: Инициализация дисплея, выбор режима recovery/загрузки, загрузка Android boot image, переход в ядро
+  │
+  ▼
+ЭТАП 4: Linux Kernel (boot.img через LK)
+  Режим: AArch64 (ARM64)
+  Роль: Android OS
+</div>
+
+<hr>
+
+<h2 id="stage1">ЭТАП 1: BROM (Boot ROM)</h2>
+
+<h3>Вектор сброса и ранняя инициализация</h3>
+
+<p>При включении CPU ARM исполняет код по адресу 0x0 в режиме ARM. BROM отображается в память по адресу 0x0.</p>
+
+<p><strong>Вектор сброса (0x00):</strong> <code>B 0x54</code> — прыжок через таблицу векторов исключений.</p>
+
+<p><strong>Векторы исключений (0x04-0x3C):</strong> Все бесконечные циклы (undefined, SWI, prefetch abort, data abort — не используются в BROM).</p>
+
+<p><strong>Сохранение контекста (0x10-0x3C):</strong></p>
+<pre><code>0x10: LDR  r9, =0x00102B60    ; База области сохранения контекста
+0x14: STR  r0, [r9]           ; Сохранить причину загрузки
+0x18: STR  r1, [r9, #4]       ; Конфигурация загрузки
+0x2C: MRC  p15, 0, r0, c5, c0, {0}  ; Конфигурация региона MPU
+0x30: MRC  p15, 0, r1, c6, c0, {0}  ; База региона MPU
+0x3C: B    0xD9A8             ; Прыжок в основной init</code></pre>
+
+<p>Сохранённый контекст: r0 (выбор устройства загрузки: eMMC/UFS/SDMMC), r1–r4 (конфиг загрузки), LR, CP15 c5/c6 (конфиг региона MPU для окна устройства загрузки).</p>
+
+<h3>Основной init по адресу 0x54</h3>
+
+<pre><code>0x54: MOV  r0, #0             ; Обнуление рабочих регистров (r0–r12, SP, LR)
+0xB0: BL   0x11B54            ; early_hardware_init() — тактирование, PLL, сторожевой таймер
+0xE0: CPS  #0x13              ; Вход в режим SVC
+0xE4: MOV  SP, =0x00013084    ; Указатель стека SVC
+0xF0: BL   0x20C              ; secure_init() — включение защищённых функций
+0xF4: BL   0x11BB0            ; clock_init() — дерево системных тактов
+0xF8: BL   0x7B20             ; watchdog_disable()
+0xFC: BLX  0xDA70             ; Переход в режим Thumb → main_brom()</code></pre>
+
+<h3>Основной BROM (Thumb режим, 0xDA70+)</h3>
+
+<ol>
+<li><strong>Определение источника загрузки</strong> — чтение HW регистров eMMC/UFS/COMBO (строки: &quot;EMMC_BOOT&quot; @ 0x12B4, &quot;UFS_BOOT&quot;, &quot;COMBO_BOOT&quot;)</li>
+<li><strong>Инициализация контроллера памяти</strong></li>
+<li><strong>Проверка заголовка TIMESTMP</strong> — валидация разметки flash</li>
+<li><strong>Загрузка Preloader</strong> — поиск заголовка GFH (<code>MMM\x01</code> magic), парсинг GFH_FILE_INFO, копирование в SRAM по 0x100000, верификация подписи через встроенный открытый ключ</li>
+<li><strong>USB Download Mode</strong> — если нажата комбинация клавиш или загрузка не удалась:<br>
+&nbsp;&nbsp;- Режим &quot;USBDL&quot; (строки по 0x3FB0)<br>
+&nbsp;&nbsp;- Режимы ACM USB виртуального COM-порта: &quot;ACM COMMU&quot;, &quot;ACM DATA&quot;, &quot;ACM VIRTUALCOM&quot;<br>
+&nbsp;&nbsp;- Ожидание подписанного Download Agent (DA) через USB</li>
+<li><strong>Переход в preloader</strong> — очистка кэшей, BX на вход preloader по 0x10066C</li>
+</ol>
+
+<p><strong>BROM НЕ выполняет:</strong> инициализацию DRAM, разбор файловых систем, верификацию boot image.</p>
+
+<hr>
+
+<h2 id="stage2">ЭТАП 2: Preloader</h2>
+
+<h3>Загрузка и цепочка заголовков GFH</h3>
+
+<p>BROM загружает <code>preloader_ruby.bin</code> из загрузочного раздела через сырое чтение блоков. Файл начинается с заголовков GFH:</p>
+
+<table>
+<thead><tr><th>Смещение</th><th>Тип</th><th>Размер</th><th>Описание</th></tr></thead>
+<tbody>
+<tr><td>0x000</td><td>GFH_FILE_INFO (тип 0)</td><td>56 B</td><td>Дескриптор образа</td></tr>
+<tr><td>0x038</td><td>GFH_BL_INFO (тип 1)</td><td>12 B</td><td>Информация/версия загрузчика</td></tr>
+<tr><td>0x044</td><td>GFH_BL_SEC_KEY (тип 7)</td><td>100 B</td><td>Открытый ключ RSA (данные по 0x50)</td></tr>
+<tr><td>0x0A8</td><td>GFH_ATTEST (тип 2)</td><td>20 B</td><td>Данные аттестации</td></tr>
+<tr><td>0x0BC</td><td>GFH_BL_LOAD (тип 8)</td><td>48 B</td><td>Дескрипторы сегментов загрузки</td></tr>
+<tr><td>0x0EC</td><td>GFH_BL_ATTR (тип 18)</td><td>20 B</td><td>Атрибуты (флаги отладки?)</td></tr>
+</tbody>
+</table>
+
+<p><strong>Парсинг GFH_FILE_INFO:</strong></p>
+<pre><code>magic:       MMM\x01
+name:        FILE_INFO
+flash_type:  0x0F00          ; eMMC загрузочный раздел
+sig_len:     0x20 (32)       ; Длина хеша SHA-256
+load_addr:   0x100000
+entry:       0x66C           ; Вход = load_addr + 0x66C = 0x10066C</code></pre>
+
+<p><strong>GFH_BL_SEC_KEY</strong> содержит встроенный открытый ключ RSA для верификации подписи preloader. При неудачной верификации BROM переходит в режим USB загрузки.</p>
+
+<h3>Структура файла</h3>
+
+<pre><code>0x000-0x0FF:  Заголовки GFH
+0x100-0x26C:  Код запуска ARM
+0x300-0x340:  Область данных GFH
+0x100-0x57FFF: Код Thumb2
+0x58000-0x6F000: строки / rodata
+0x72000-0x73634: GOT (544 ссылок на строки через паттерн LDR+ADD на основе GOT)</code></pre>
+
+<h3>Точка входа (0x10066C)</h3>
+
+<ul>
+<li>Установка указателя стека (SRAM ~0x200000+)</li>
+<li>Инициализация PLL, контроллера DRAM, pinmux</li>
+<li>Переход в режим Thumb2</li>
+</ul>
+
+<h3>Инициализация DRAM</h3>
+
+<p>Основная задача: инициализация LPDDR4x через шину PMIC/SPI, калибровка таймингов, включение каналов.</p>
+
+<p>После инициализации DRAM:</p>
+<pre><code>0x100000-0x17B000  Код Preloader
+0x200000+          Стек/куча/BSS
+0x4000000+        Доступная DRAM</code></pre>
+
+<h3>Парсинг таблицы разделов</h3>
+
+<p>Чтение GPT с устройства загрузки (LBA 1 заголовок, LBA 2–33 записи). Ключевые разделы:</p>
+<pre><code>boot      → Linux kernel + ramdisk
+recovery  → Recovery kernel + ramdisk
+lk        → LK загрузчик
+vbmeta    → Метаданные верифицированной загрузки
+tee       → Trusted Execution Environment</code></pre>
+
+<h3>Загрузка образов и верификация</h3>
+
+<p><strong>Ключевые функции:</strong></p>
+<table>
+<thead><tr><th>Функция</th><th>Адрес</th><th>Роль</th></tr></thead>
+<tbody>
+<tr><td>preloader_main</td><td>0x343C0</td><td>Точка входа</td></tr>
+<tr><td>partition init</td><td>0x45CC0</td><td>Инициализация разделов</td></tr>
+<tr><td>partition loader</td><td>0xD750</td><td>Загрузка образов разделов (вызывает RSA verify по 0xD7E0)</td></tr>
+<tr><td>image loader</td><td>0x3E780</td><td>Основной загрузчик образов (вызывает 0x50CD4 @ 0x3E66C, 0x50F94 @ 0x3E848)</td></tr>
+<tr><td>SHA256</td><td>0x50B14</td><td>Вычисление хеша SHA-256</td></tr>
+<tr><td>RSA verify</td><td>0x51B98</td><td>Верификация подписи RSA-2048</td></tr>
+<tr><td>Hash compare</td><td>0x51D48</td><td>Сравнение хешей</td></tr>
+<tr><td>printf</td><td>0x43B94</td><td>Отладочный вывод</td></tr>
+<tr><td>assert/panic</td><td>0x3F754</td><td>Обработка ошибок</td></tr>
+<tr><td>malloc</td><td>0x47494</td><td>Выделение памяти</td></tr>
+<tr><td>memcpy/memset</td><td>0x47298, 0x472A8, 0x472BE</td><td>Операции с памятью</td></tr>
+</tbody>
+</table>
+
+<p><strong>Цепочка вызовов верификации:</strong></p>
+<pre><code>partition_loader (0xD750)
+  → image_loader (0x3E780)
+    → RSA_verify_main @ 0x50CD4 (RSA-2048 + SHA-256)
+    → image_auth_check @ 0x50F94 (SHA-256 + сравнение хеша)
+    → Дополнительные проверки для TEE (0x512B8-0x51400)
+    → Проверка хеша прошивки (0x51118-0x5128A)</code></pre>
+
+<p><strong>Поток RSA_verify_main @ 0x50CD4:</strong></p>
+<pre><code>push.w {r4-r7,sb,sl,fp,lr}; sub sp,#0x48
+  → BL 0x461E0 (инициализация крипто)
+  → BL 0x3294C, 0x461FA (загрузка/парсинг данных)
+  → BL 0x50B14 (хеш SHA-256)
+  → BL 0x5187C (криптооперация)
+  → BL 0x50A58, 0x50AC4 (шаги верификации)
+  → BL 0x51B98 (верификация подписи RSA)
+  → BL 0x51D48 (сравнение хеша)
+  → CMP R0,#0; IT NE; MOVNE R7,R3
+  → return r7 (=0 при успехе)</code></pre>
+
+<p>Ветки ошибок: 0x50E36, 0x50E9C, 0x50EAC, 0x50EEE, 0x50F04, 0x50F18 → 0x50F32.</p>
+
+<p><strong>Поток image_auth_check @ 0x50F94:</strong></p>
+<pre><code>push {r4-r7,lr}; sub sp,#0x2c
+  → BL 0x50B14 (SHA-256)
+  → BL 0x51D48 (сравнение хеша)
+  → CBNZ R0,0x50FD6 → "[%s] img auth fail(0x%x)"
+  → CBZ R0,0x50FE6 → "[%s] %s" "Verify Pass"
+  → return r4 (=0 при успехе)</code></pre>
+
+<h3>Переход в LK</h3>
+
+<p>После верификации: парсинг BR заголовка LK, копирование по 0x48200000, установка аргументов загрузки, очистка кэшей, переход на точку входа LK.</p>
+
+<hr>
+
+<h2 id="stage3">ЭТАП 3: LK (Little Kernel)</h2>
+
+<h3>Формат бинарника LK (заголовок BR Mediatek)</h3>
+
+<table>
+<thead><tr><th>Смещение</th><th>Размер</th><th>Поле</th><th>Значение</th><th>Описание</th></tr></thead>
+<tbody>
+<tr><td>0x000</td><td>4</td><td>magic1</td><td>0x58881688</td><td>Магия заголовка BR</td></tr>
+<tr><td>0x004</td><td>4</td><td>total_size</td><td>0x1BF668 (1.83 МБ)</td><td>Размер кода</td></tr>
+<tr><td>0x008</td><td>8</td><td>signature</td><td>&quot;lk\0\0\0\0\0\0&quot;</td><td>Идентификатор boot image</td></tr>
+<tr><td>0x030</td><td>4</td><td>magic2</td><td>0x58891689</td><td>Вторая магия</td></tr>
+<tr><td>0x034</td><td>4</td><td>load_address</td><td>0x200</td><td>Смещение в пункте назначения</td></tr>
+<tr><td>0x038</td><td>4</td><td>flags</td><td>0x1</td><td>BR_RAW (сырой бинарник)</td></tr>
+<tr><td>0x044</td><td>4</td><td>entry_point</td><td>0x10</td><td>Вход = load_addr + entry</td></tr>
+<tr><td>0x048-0x1FF</td><td>—</td><td>padding</td><td>0xFFFF</td><td>Промежуток до начала кода</td></tr>
+<tr><td>0x200+</td><td>—</td><td>ARM код</td><td>—</td><td>Исполняемый код начинается здесь</td></tr>
+</tbody>
+</table>
+
+<p>Загруженный вход: 0x48200000 + 0x10 = 0x48200010 → перемещён на 0x48200080.</p>
+
+<h3>Вход и саморелокация (0x200)</h3>
+
+<pre><code>; Обработчики исключений
+0x200: B    0x224           ; Вектор сброса
+0x204: B    0x25620         ; Неопределённая инструкция
+0x208: B    0x2563C         ; SWI
+0x20C: B    0x25658         ; Prefetch abort
+0x210: B    0x25674         ; Data abort
+0x214: B    0x25690         ; IRQ
+0x218: B    0x25694         ; FIQ
+0x21C: B    0x256F4         ; Зарезервировано
+
+; Реальный вход
+0x224: LDR  r6, =0x48200020 ; Хранилище источника загрузки
+       STR  r4, [r6]        ; Сохранить источник загрузки от preloader
+       MRC  p15, 0, r0, c1, c0, {0}  ; Чтение SCTLR
+       BIC  r0, r0, #0xB000 ; Очистка битов I-cache + MMU
+       BIC  r0, r0, #5      ; Очистка M (MMU) + C (D-cache)
+       ORR  r0, r0, #2      ; Установка A (проверка выравнивания)
+       MCR  p15, 0, r0, c1, c0, {0}  ; Запись SCTLR
+       ; Саморелокация при неверном адресе загрузки
+       ; Копирование 0x48200000-0x483BF668 → 0x48200000
+       BX   0x48200080      ; Переход на перемещённый код</code></pre>
+
+<h3>Настройка стека по 0x48200080</h3>
+
+<p>Все режимы разделяют область стека по 0x483C38EC (кроме IRQ):</p>
+
+<table>
+<thead><tr><th>Режим</th><th>Указатель стека</th></tr></thead>
+<tbody>
+<tr><td>IRQ (0x12)</td><td>0x483C38EC (отдельный)</td></tr>
+<tr><td>FIQ (0x11)</td><td>Использует SVC</td></tr>
+<tr><td>Abort (0x17)</td><td>Использует SVC</td></tr>
+<tr><td>Undefined (0x1B)</td><td>Использует SVC</td></tr>
+<tr><td>System (0x1F)</td><td>Использует SVC</td></tr>
+<tr><td>Supervisor (0x13)</td><td>Использует SVC</td></tr>
+</tbody>
+</table>
+
+<h3>Обнуление BSS → lk_main</h3>
+
+<pre><code>LDR  r0, =0x48338D60  ; Начало BSS
+LDR  r1, =0x48338D60  ; Конец BSS (начало = конец? возможно ошибка)
+LDR  r2, =0x483BF668  ; Реальный конец
+; Цикл обнуления BSS
+BLX  0x4827AEC        ; lk_main() — вход в C
+B    0x4820314        ; Бесконечный цикл</code></pre>
+
+<h3>LK Main (0x4827AEC) — C Runtime</h3>
+
+<ol>
+<li><strong>Инициализация архитектуры:</strong> MMU + таблицы страниц, включение D-cache, обслуживание TLB</li>
+<li><strong>Инициализация платформы (MT6877):</strong> UART консоль, дерево тактирования, GPIO/pinmux для дисплея/кнопок</li>
+<li><strong>Инициализация дисплея:</strong> Панель, подсветка, framebuffer (логотип загрузки)</li>
+<li><strong>Определение устройства загрузки:</strong> Чтение PMIC/регистров для причины загрузки:<br>
+&nbsp;&nbsp;- Обычная загрузка<br>
+&nbsp;&nbsp;- Recovery (громкость вверх + питание)<br>
+&nbsp;&nbsp;- Fastboot (громкость вниз + питание)<br>
+&nbsp;&nbsp;- Meta режим</li>
+<li><strong>Загрузка boot image:</strong> Поиск GPT → чтение заголовка Android boot image v3/v4 → загрузка kernel (Image.gz-dtb) + ramdisk в DRAM → передача DTB</li>
+<li><strong>Загрузка ядра:</strong> Настройка ATAGs/device tree → режим AArch64 → переход на точку входа ядра</li>
+</ol>
+
+<hr>
+
+<h2 id="memmap">Карта памяти</h2>
+
+<pre><code>Регион          Начало          Конец           Используется
+──────          ─────           ───             ──────────
+BROM (в SoC)   0x00000000      0x0001FFFF      Код BROM (128 КБ)
+SRAM стек      0x00013084      0x00013150      Стеки BROM (IRQ/SVC)
+SRAM контекст  0x00102B60      0x00102B80      Сохранение контекста BROM
+Preloader      0x00100000      0x001736B4      Preloader (загружен BROM)
+DRAM стек      0x20000000+                     Стеки/куча/BSS Preloader/LK
+LK код         0x48200000      0x483BF668      LK загрузчик
+DRAM куча      0x40000000+                     Доступная DRAM (до 12 ГБ)</code></pre>
+
+<hr>
+
+<h2 id="patches">Анализ патчей</h2>
+
+<h3>Preloader: Две стратегии патчинга</h3>
+
+<p><strong>Метод A — NOP в месте вызова (<code>preloader_ruby_patched.bin</code>):</strong> 12 байт, 3 места.</p>
+
+<table>
+<thead><tr><th>Расположение</th><th>Оригинал</th><th>Патч</th><th>Эффект</th></tr></thead>
+<tbody>
+<tr><td>0x3E66C</td><td><code>bl 0x50CD4</code> (RSA verify)</td><td><code>nop; nop</code></td><td>Удаляет вызов RSA verify из загрузчика образов</td></tr>
+<tr><td>0x3E68C</td><td><code>bl 0x522C0</code> (проверка)</td><td><code>nop; nop</code></td><td>Удаляет вызов проверки из загрузчика образов</td></tr>
+<tr><td>0x4618E</td><td><code>ubfx r0,r0,#1,#1</code> (тест бита)</td><td><code>movs r0,#0; nop</code></td><td>Инициализация разделов возвращает 0 (успех)</td></tr>
+</tbody>
+</table>
+
+<p><strong>Метод B — возврат из функции (<code>preloader_ruby_patched_local.bin</code>):</strong> 8 байт, 2 места.</p>
+
+<table>
+<thead><tr><th>Расположение</th><th>Оригинал</th><th>Патч</th><th>Эффект</th></tr></thead>
+<tbody>
+<tr><td>0x50CD4</td><td><code>2d e9 f0 4e</code> (push.w {r4-r7,sb,sl,fp,lr})</td><td><code>00 20 70 47</code> (movs r0,#0; bx lr)</td><td>RSA_verify_main сразу возвращает 0</td></tr>
+<tr><td>0x50F94</td><td><code>f0 b5 8b b0</code> (push {r4-r7,lr}; sub sp,#0x2c)</td><td><code>00 20 70 47</code> (movs r0,#0; bx lr)</td><td>image_auth_check сразу возвращает 0</td></tr>
+</tbody>
+</table>
+
+<p>Оба дают одинаковый результат: <strong>никакой верификации подписей загружаемых образов</strong>.</p>
+
+<p><strong>Связь:</strong> RE_CONTEXT.md описывает патчи по 0x50CD4/0x50F94 (соответствует patched_local), но ANALYSIS_PROGRESS.md маркирует &quot;patched&quot; файл с использованием других мест (0x3E66C/0x3E68C/0x4618E). Это предполагает:</p>
+<ul>
+<li><code>patched_local</code> — первая попытка (обход на уровне функций, более очевидный, меньше размер: 8 Б)</li>
+<li><code>patched</code> — улучшенная версия (обход на уровне вызовов, менее заметный: 12 Б)</li>
+</ul>
+
+<h3>Перезапись состояния режима загрузки LK (<code>lk_a_patched.bin</code>)</h3>
+
+<p>11 байт изменено по 0x273B4-0x27400:</p>
+
+<pre><code>; Оригинал (0x273B4):
+CMP  r4, #4
+IT   EQ
+STREQ.W  r4, [r8]           ; Запись 4 при r4==4
+BEQ  0x273EA
+...
+; По 0x27400:
+MOVS r3, #3
+STR.W r3, [r8]              ; Запись 3 в другом пути
+
+; Патч:
+MOVS r3, #0
+STR.W r3, [r8]              ; Всегда запись 0
+B    0x273EA
+...
+; По 0x27400:
+MOVS r3, #0
+STR.W r3, [r8]              ; Запись 0 вместо 3</code></pre>
+
+<p><strong>Эффект:</strong> Значения 4 и 3, записываемые в <code>[r8]</code>, заменены на 0. <code>[r8]</code> вероятно управляет блокировкой режима загрузки или состоянием верифицированной загрузки (green/orange/red). Нейтрализует блокировку/проверку безопасности при выборе режима загрузки.</p>
+
+<hr>
+
+<h2 id="vulns">Поверхность уязвимостей</h2>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 1</span> GCPU Blacklist Bypass (Аппаратный криптодвижок)</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> BROM — GCPU @ 0x10050000</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Тип:</strong> Обход ограничений аппаратной безопасности</p>
+<p>BROM реализует чёрный список памяти, предотвращающий чтение чувствительных регионов (BROM, SRAM preloader, регистры безопасности). Управляется через регистры GCPU. Регистры чёрного списка доступны для записи через тот же интерфейс AES-CBC, что используется для криптографии — разделение контроля доступа отсутствует.</p>
+<p><strong>Эксплойт:</strong> Запись 0 в регистры чёрного списка через настройку AES-CBC → полный R/W доступ к памяти.</p>
+<p><strong>Влияние:</strong> Полный дамп BROM, дамп preloader из SRAM, R/W ко ВСЕЙ памяти.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 2</span> Kamakiri — Переполнение USB Control Transfer</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> BROM — интерфейс USB CDC ACM</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Тип:</strong> Переполнение буфера USB control transfer + манипуляция регистрами</p>
+<p>Три варианта:</p>
+<ul>
+<li><strong>v1:</strong> Запись в scratch-регистр watchdog (0x10007050) → перезапись send_ptr → запуск SEND_CERT (команда 0xE0) → выполнение кода в контексте BROM</li>
+<li><strong>v2:</strong> USB CDC line coding ctrl_transfer — отсутствие проверки длины при копировании дескриптора → переполнение стекового буфера → перезапись соседних данных</li>
+<li><strong>v3 (KamakiriPL):</strong> Переполнение USB CDC line coding на уровне preloader → обход состояния аутентификации; также <code>bypass_2nd_da()</code> для обхода авторизации DA</li>
+</ul>
+<p><strong>Влияние:</strong> Произвольная нагрузка в контексте BROM, дамп preloader/BROM, обход авторизации загрузки 1-го этапа.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 3</span> HeapBait — Переполнение кучи в XML парсере (DA)</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> Download Agent — парсер XML команд</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Тип:</strong> Переполнение буфера кучи (несоответствие выделенного размера и размера чтения)</p>
+<p>При обработке DA команды <code>CMD:SECURITY</code> с <code>allinone_signature</code>:</p>
+<ol>
+<li>Парсинг атрибута XML <code>filename</code> → выделение буфера на основе ОБЪЯВЛЕННОГО размера имени файла</li>
+<li>Чтение данных файла из USB с использованием РАЗМЕРА ПАКЕТА (0x2000), а не выделенного размера</li>
+<li>Выделенный буфер: 0x1400 байт; данные за чанк: 0x2000 байт → переполнение: 0xC00 байт</li>
+</ol>
+<p><strong>Эксплойт:</strong> 3 этапа: загрузка shellcode как signature → запуск переполнения с filename из 5000 символов → повреждённый заголовок аллокатора вызывает перезапись колбэка DPC → выполнение shellcode с привилегиями DA → патч политик безопасности (hash binding, verify policy, download policy, SBC, SLA).</p>
+<p><strong>Значения самопроверки (ARM64 на MT6886+):</strong></p>
+<pre><code>shellcode_addr = 0x44C7F100, heap_base = 0x4007F100, dpc_addr = 0x40070028</code></pre>
+<p><strong>Проверка:</strong> DA пропатчен, если содержит &quot;Dest XML file name buffer overflow&quot;.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 4</span> Efuse/OTP не запрограммированы</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> Efuses @ 0x11F10000, раздел OTP</span> <span class="severity-critical">CRITICAL</span></div>
+<p><strong>Тип:</strong> Отсутствие постоянной конфигурации безопасности</p>
+<p><code>efuse.bin</code>: ВСЕ 0xAA (незапрограммированное состояние стирания). <code>otp.bin</code>: ВСЕ 0x00.</p>
+<p>Отсутствуют критические efuse: включение secure boot, отключение JTAG, хеш ключа OEM, конфигурация загрузки. Устройство не имеет <strong>аппаратного корня доверия</strong> — только программная безопасность.</p>
+<p><strong>Влияние:</strong> Любой программный обход является ПОСТОЯННЫМ. Невозможно заблокировать после загрузки. Все efuse R/W через GCPU (Уязв 1).</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 5</span> Разделы безопасности перезаписываемы</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> Flash разделы seccfg, gsort, sec1, vbmeta_*</span> <span class="severity-high">HIGH</span></div>
+<p><strong>Тип:</strong> Программно реализованная безопасность на перезаписываемом носителе</p>
+<ul>
+<li><strong>seccfg:</strong> 64 Б используется из 8 МБ — магия &quot;MMMM&quot;, flags=0x01 (включено?), 32-байтный хеш/секрет. Весь раздел можно обнулить.</li>
+<li><strong>gsort:</strong> Минимальные данные с повторяющимися паттернами по 0x70/0x78 (счётчик отката?). Повсюду стёртые паттерны.</li>
+<li><strong>sec1:</strong> Полностью нулевой (2 МБ) — отсутствие состояния блокировки = загрузчик разблокирован.</li>
+<li><strong>vbmeta:</strong> Стандартный заголовок AVB — неактуален при патченом загрузчике.</li>
+</ul>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 6</span> Preloader RSA Verify NOP (Подтверждено)</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> preloader_ruby.bin @ 0x50CD4, 0x50F94, 0x3E66C, 0x3E68C</span> <span class="severity-high">HIGH</span></div>
+<p><strong>Тип:</strong> Обход верификации подписи RSA (два метода)</p>
+<p>Оба метода подтверждены рабочими: патч возврата из функции (return 0) и NOP в месте вызова (пропуск вызова). См. раздел Анализа патчей для подробностей на уровне байт.</p>
+</div>
+
+<div class="vuln">
+<h4><span class="section-tag">УЯЗВ 7</span> Перезапись состояния режима загрузки LK</h4>
+<div class="vuln-label"><span><strong>Расположение:</strong> lk_a.bin @ 0x273B4, 0x27400</span> <span class="severity-medium">MEDIUM</span></div>
+<p><strong>Тип:</strong> Перезапись регистра состояния безопасности</p>
+<p>Значения 4 и 3, записываемые в <code>[r8]</code>, заменены на 0 — нейтрализует заблокированные/принудительные состояния загрузки. См. раздел Анализа патчей для подробностей.</p>
+</div>
+
+<hr>
+
+<h2 id="security">Архитектура безопасности</h2>
+
+<ol>
+<li><strong>BROM → Preloader:</strong> Проверка подписи RSA-2048 + SHA-256 через ключ в GFH_BL_SEC_KEY. Провал → USB download mode (требуется аутентифицированный DA).</li>
+<li><strong>Preloader → LK/boot:</strong> Аналогично RSA-2048 + SHA-256. Каждый образ (lk, boot, recovery, tee) верифицируется индивидуально.</li>
+<li><strong>LK → Kernel:</strong> Android Verified Boot (AVB) — дерево хешей vbmeta + счётчик отката. LK передаёт device tree с состоянием верифицированной загрузки.</li>
+<li><strong>Состояние блокировки:</strong> Preloader проверяет состояние блокировки загрузчика (раздел sec1). Заблокировано = только подписанные образы. Разблокировано = экран предупреждения + любые образы загружаются.</li>
+<li><strong>Авторизация SLA/DAA:</strong> Режим загрузки требует SLA (вызов-ответ с ключом OEM) + DAA (подписанный бинарник DA).</li>
+</ol>
+
+<h3>Влияние патчей на безопасность</h3>
+
+<table>
+<thead><tr><th>Патч</th><th>Что обходит</th><th>Влияние</th></tr></thead>
+<tbody>
+<tr><td>preloader 0x50CD4 (или 0x3E66C)</td><td>Верификация подписи RSA</td><td>Загрузка любых неподписанных LK/boot</td></tr>
+<tr><td>preloader 0x50F94 (или 0x3E68C)</td><td>Проверка хеша аутентичности</td><td>Второй уровень верификации</td></tr>
+<tr><td>preloader 0x4618E</td><td>Флаг инициализации разделов</td><td>Принудительный успех</td></tr>
+<tr><td>LK 0x273B4/0x27400</td><td>Проверка блокировки режима загрузки</td><td>Отключает принудительную безопасную загрузку</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2 id="attacksurf">Сводка поверхности атаки</h2>
+
+<table>
+<thead><tr><th>#</th><th>Уязвимость</th><th>Этап</th><th>Требуемый доступ</th><th>Сложность</th><th>Влияние</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>GCPU Blacklist Bypass</td><td>BROM</td><td>USB + DA</td><td>Средняя</td><td>Полный R/W памяти</td></tr>
+<tr><td>2</td><td>Kamakiri USB Overflow</td><td>BROM</td><td>USB</td><td>Низкая</td><td>Произвольный код в BROM</td></tr>
+<tr><td>3</td><td>HeapBait XML Overflow</td><td>DA</td><td>USB + подписанный DA</td><td>Высокая</td><td>Полный R/W flash</td></tr>
+<tr><td>4</td><td>Efuse/OTP не запрограммированы</td><td>Аппаратура</td><td>Любой доступ</td><td>Нет</td><td>Нет постоянной безопасности</td></tr>
+<tr><td>5</td><td>Secpart перезаписываемы</td><td>Загрузчик</td><td>Доступ DA</td><td>Низкая</td><td>Откат состояния безопасности</td></tr>
+<tr><td>6</td><td>RSA Verify NOP</td><td>Preloader</td><td>Модификация preloader</td><td>Низкая</td><td>Загрузка неподписанных образов</td></tr>
+<tr><td>7</td><td>LK State Overwrite</td><td>LK</td><td>Модификация LK</td><td>Низкая</td><td>Отключение принудительного режима загрузки</td></tr>
+</tbody>
+</table>
+
+<h2 id="attackpath">Рекомендуемый вектор атаки (наименьшее сопротивление)</h2>
+
+<pre><code>1. USB подключение к устройству в режиме BROM (громкость вверх + питание)
+2. Kamakiri (Уязв 2) → выполнение кода в BROM → дамп BROM, проверка адресов чёрного списка
+3. GCPU bypass (Уязв 1) → отключение чёрного списка → полный доступ к памяти
+4. Дамп preloader из SRAM (0x200000-0x240000)
+5. Применение патчей preloader (Уязв 6): NOP для вызовов RSA
+6. Запись патченого preloader в загрузочный раздел
+7. Устройство загружает ЛЮБОЙ неподписанный boot image</code></pre>
+
+<p><strong>Если существует payload HeapBait для MT6877:</strong></p>
+<pre><code>1. Отправка подписанного DA → загрузка HeapBait → XML переполнение (Уязв 3)
+2. Патч политик безопасности DA: hash binding, verify policy, download policy → все return 0
+3. Прямая запись flash → замена LK, boot, recovery неподписанными версиями</code></pre>
+
+<hr>
+
+<h2 id="coldstorage">Примечание: Cold Storage</h2>
+
+<p>Состояние Efuse (все 0xAA) — самый критический вывод:</p>
+<ul>
+<li>Устройство <strong>никогда</strong> не имело включённой аппаратной безопасной загрузки</li>
+<li>Полное программное восстановление до стока <strong>не может</strong> её включить</li>
+<li>OEM поставил устройство с постоянно разблокируемым загрузчиком</li>
+<li>Любой использованный эксплойт переживёт будущие обновления ПО</li>
+<li>OTA обновления перезаписывают flash с заблокированным состоянием, но efuse не пережжёны → программные блокировки снова обходятся через те же эксплойты</li>
+</ul>
+
+<hr>
+
+<h2 id="downloads">Загрузки</h2>
+
+<div class="download-grid">
+
+<div class="download-card">
+<div class="fn">brom_MT6877_MT6877V_MT8791N_959.bin</div>
+<div class="sz">128 КБ</div>
+<div class="desc">Дамп BROM (Boot ROM) — ARM/Thumb, кремниевое ПЗУ</div>
+<a class="download-btn" href="../brom_MT6877_MT6877V_MT8791N_959.bin" download>Скачать</a>
+</div>
+
+<div class="download-card">
+<div class="fn">preloader_ruby.bin</div>
+<div class="sz">472756 B</div>
+<div class="desc">Preloader — загрузчик 2-го этапа, Thumb2, оригинал</div>
+<a class="download-btn" href="../preloader_ruby.bin" download>Скачать</a>
+</div>
+
+<div class="download-card">
+<div class="fn">preloader_ruby_patched.bin</div>
+<div class="sz">472756 B</div>
+<div class="desc">Патченый preloader — NOP в местах вызова (12 Б, 3 места)</div>
+<a class="download-btn" href="../preloader_ruby_patched.bin" download>Скачать</a>
+</div>
+
+<div class="download-card">
+<div class="fn">preloader_ruby_patched_local.bin</div>
+<div class="sz">472756 B</div>
+<div class="desc">Патченый preloader — возврат из функции (8 Б, 2 места)</div>
+<a class="download-btn" href="../preloader_ruby_patched_local.bin" download>Скачать</a>
+</div>
+
+<div class="download-card">
+<div class="fn">lk_a.bin</div>
+<div class="sz">8 МБ</div>
+<div class="desc">LK загрузчик — оригинал, заголовок BR MTK + ARM/Thumb2</div>
+<a class="download-btn" href="../lk_a.bin" download>Скачать</a>
+</div>
+
+<div class="download-card">
+<div class="fn">lk_a_patched.bin</div>
+<div class="sz">8 МБ</div>
+<div class="desc">LK загрузчик — патченый (перезапись состояния режима загрузки)</div>
+<a class="download-btn" href="../lk_a_patched.bin" download>Скачать</a>
+</div>
+
+</div>
+
+</div>
+</div>
+
+<script>
+(function() {
+  var toggle = document.getElementById('sidebarToggle');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    overlay.classList.add('open');
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+  }
+  window.closeSidebar = closeSidebar;
+
+  toggle.addEventListener('click', function() {
+    if (sidebar.classList.contains('open')) { closeSidebar(); }
+    else { openSidebar(); }
+  });
+  overlay.addEventListener('click', closeSidebar);
+
+  var links = sidebar.querySelectorAll('a');
+  var sections = [];
+  links.forEach(function(link) {
+    var href = link.getAttribute('href');
+    if (href && href.startsWith('#')) {
+      sections.push(href.substring(1));
+    }
+  });
+
+  function updateActive() {
+    var scrollY = window.scrollY + 100;
+    var activeId = 'top';
+    sections.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el && el.offsetTop <= scrollY) {
+        activeId = id;
+      }
+    });
+    links.forEach(function(link) {
+      var href = link.getAttribute('href');
+      link.classList.remove('active');
+      if (href === '#' + activeId) {
+        link.classList.add('active');
+      }
+    });
+  }
+
+  window.addEventListener('scroll', updateActive);
+  updateActive();
+})();
+</script>
+
+</body>
+</html>
