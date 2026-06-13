@@ -11,281 +11,7 @@
 <meta name="twitter:title" content="Xiaomi ruby — LK Bootloader Unlock Analysis">
 <meta name="twitter:description" content="Full RE analysis of LK bootloader unlock on Xiaomi ruby (MT6877).">
 <title>Xiaomi ruby — LK Bootloader Unlock Analysis</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text2: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --orange: #d29922;
-    --red: #f85149;
-    --purple: #bc8cff;
-    --sidebar-w: 260px;
-  }
-  .ai-banner {
-    background: #d29922;
-    color: #0d1117;
-    text-align: center;
-    padding: 10px 20px;
-    font-size: 0.9em;
-    font-weight: 600;
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%;
-    z-index: 10000;
-    border-bottom: 2px solid #f0c040;
-    line-height: 1.4;
-  }
-  .ai-banner strong { color: #000; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.6;
-    display: flex;
-    min-height: 100vh;
-    padding-top: 56px;
-  }
-
-  /* Sidebar */
-  .sidebar {
-    position: fixed;
-    top: 0; left: 0;
-    width: var(--sidebar-w);
-    height: 100vh;
-    background: var(--bg2);
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
-    padding: 20px 0;
-    z-index: 100;
-  }
-  .sidebar-title {
-    font-size: 0.85em;
-    font-weight: 700;
-    color: var(--accent);
-    padding: 0 16px 12px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .sidebar a {
-    display: block;
-    padding: 6px 16px;
-    color: var(--text2);
-    text-decoration: none;
-    font-size: 0.82em;
-    transition: background 0.15s, color 0.15s;
-    border-left: 2px solid transparent;
-  }
-  .sidebar a:hover,
-  .sidebar a:focus {
-    background: rgba(88,166,255,0.08);
-    color: var(--text);
-  }
-  .sidebar a.active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: rgba(88,166,255,0.06);
-  }
-  .sidebar-section { margin-top: 4px; }
-  .sidebar-section a { padding-left: 24px; font-size: 0.78em; }
-  .sidebar-toggle {
-    display: none;
-    position: fixed;
-    top: 12px; left: 12px;
-    z-index: 10001;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 1.2em;
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .sidebar-overlay { display: none; }
-
-  /* Main content */
-  .main {
-    margin-left: var(--sidebar-w);
-    flex: 1;
-    max-width: 960px;
-    padding: 40px 40px 60px;
-  }
-  .container { width: 100%; }
-
-  h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
-  h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 40px 0 16px; }
-  h3 { font-size: 1.15em; margin: 28px 0 12px; }
-  h4 { font-size: 1em; margin: 16px 0 8px; }
-  p { margin: 0 0 12px; }
-  a { color: var(--accent); }
-  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
-  .meta { color: var(--text2); font-size: 0.9em; margin-bottom: 24px; }
-  .meta span { display: inline-block; margin-right: 16px; }
-
-  /* Tables */
-  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.9em; }
-  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
-  th { background: var(--bg2); font-weight: 600; }
-  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-  td code, th code { font-size: 0.9em; }
-
-  /* Code blocks */
-  pre {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    overflow-x: auto;
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.85em;
-    line-height: 1.45;
-    margin: 12px 0 20px;
-    tab-size: 4;
-  }
-  code {
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.9em;
-    background: rgba(88,166,255,0.1);
-    padding: 2px 6px;
-    border-radius: 3px;
-  }
-  pre code {
-    background: none;
-    padding: 0;
-    border-radius: 0;
-  }
-
-  strong { color: #fff; }
-
-  .ascii {
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.8em;
-    line-height: 1.3;
-    white-space: pre;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    overflow-x: auto;
-    margin: 12px 0 20px;
-  }
-
-  ul, ol { margin: 8px 0 16px; padding-left: 24px; }
-  li { margin-bottom: 4px; }
-  ul ul, ol ol { margin: 4px 0; }
-
-  .section-tag {
-    display: inline-block;
-    background: var(--accent);
-    color: #000;
-    font-size: 0.7em;
-    font-weight: 700;
-    padding: 1px 8px;
-    border-radius: 10px;
-    margin-right: 8px;
-    vertical-align: middle;
-  }
-
-  /* Collapsible phases */
-  .phase {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin: 12px 0;
-    background: var(--bg2);
-    overflow: hidden;
-  }
-  .phase summary {
-    padding: 14px 16px;
-    cursor: pointer;
-    font-weight: 700;
-    font-size: 1em;
-    color: var(--accent);
-    background: var(--bg2);
-    user-select: none;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .phase summary::-webkit-details-marker { display: none; }
-  .phase summary::before {
-    content: '▶';
-    font-size: 0.8em;
-    transition: transform 0.2s;
-    color: var(--text2);
-  }
-  .phase[open] summary::before { content: '▼'; }
-  .phase summary:hover { background: rgba(88,166,255,0.06); }
-  .phase-content { padding: 0 16px 16px; }
-  .phase-content pre { margin: 8px 0; }
-
-  /* Sub-phases */
-  .sub-phase { margin: 8px 0; }
-  .sub-phase summary {
-    padding: 8px 12px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.92em;
-    color: var(--text);
-    background: rgba(255,255,255,0.02);
-    border-radius: 4px;
-    user-select: none;
-    list-style: none;
-  }
-  .sub-phase summary::-webkit-details-marker { display: none; }
-  .sub-phase summary::before {
-    content: '▸';
-    margin-right: 8px;
-    font-size: 0.9em;
-    color: var(--text2);
-  }
-  .sub-phase[open] summary::before { content: '▾'; }
-  .sub-phase-content { padding: 8px 0 8px 20px; }
-
-  .flow-arrow { color: var(--orange); }
-  .highlight { color: var(--green); }
-
-  .api-box {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    margin: 12px 0;
-    background: var(--bg2);
-    overflow-x: auto;
-  }
-  .api-box pre { border: none; margin: 0; padding: 0; background: transparent; }
-
-  /* Responsive */
-  @media (max-width: 800px) {
-    .sidebar {
-      transform: translateX(-100%);
-      transition: transform 0.25s;
-    }
-    .sidebar.open { transform: translateX(0); }
-    .sidebar-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      z-index: 99;
-    }
-    .sidebar-overlay.open { display: block; }
-    .sidebar-toggle { display: block; }
-    .main {
-      margin-left: 0;
-      padding: 60px 16px 40px;
-    }
-    table { font-size: 0.8em; }
-    th, td { padding: 6px 8px; }
-  }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -382,21 +108,22 @@
 
 <p>The LK binary is a raw binary with a Mediatek-specific header:</p>
 
-<div class="ascii">
-Offset  | Size | Description
---------|------|------------
-0x000   | 4    | Magic/ID1: 0x58881688
-0x004   | 4    | Image size: 0x001BF668
-0x008   | 2    | "lk" magic
-0x00A   | 2    | Padding
-0x030   | 4    | Magic/ID2: 0x58891689
-0x034   | 4    | Code offset: 0x200
-0x038   | 4    | Version: 0x1
-0x200   | -    | ARM32 exception vectors (B handlers)
-0x224   | -    | Early init: CP15 config, cache setup, relocation
-0x280   | -    | Stack init for all CPU modes
-0x25620+| -    | Exception handlers (Undef, SWI, Prefetch, Data, IRQ, FIQ)
-</div>
+<table>
+<thead><tr><th>Offset</th><th>Size</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>0x000</code></td><td>4</td><td>Magic/ID1: <code>0x58881688</code></td></tr>
+<tr><td><code>0x004</code></td><td>4</td><td>Image size: <code>0x001BF668</code></td></tr>
+<tr><td><code>0x008</code></td><td>2</td><td>&quot;lk&quot; magic</td></tr>
+<tr><td><code>0x00A</code></td><td>2</td><td>Padding</td></tr>
+<tr><td><code>0x030</code></td><td>4</td><td>Magic/ID2: <code>0x58891689</code></td></tr>
+<tr><td><code>0x034</code></td><td>4</td><td>Code offset: <code>0x200</code></td></tr>
+<tr><td><code>0x038</code></td><td>4</td><td>Version: <code>0x1</code></td></tr>
+<tr><td><code>0x200</code></td><td>-</td><td>ARM32 exception vectors (B handlers)</td></tr>
+<tr><td><code>0x224</code></td><td>-</td><td>Early init: CP15 config, cache setup, relocation</td></tr>
+<tr><td><code>0x280</code></td><td>-</td><td>Stack init for all CPU modes</td></tr>
+<tr><td><code>0x25620+</code></td><td>-</td><td>Exception handlers (Undef, SWI, Prefetch, Data, IRQ, FIQ)</td></tr>
+</tbody>
+</table>
 
 <p>The code is <strong>ARMv7-A Thumb2</strong> (interworking). Initial startup is ARM32, switches to Thumb2 via BX after relocation.</p>
 
@@ -421,8 +148,14 @@ Offset  | Size | Description
 
 <h2 id="boot-flow">2. Boot Flow Overview</h2>
 
-<div class="ascii">
-Preloader (BootROM) → LK (lk_a) → Boot image (boot_a) → Android
+<div class="fchain">
+<span class="fnode">Preloader<br>(BootROM)</span>
+<span class="farr"><svg width="24" height="16" viewBox="0 0 24 16"><line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5"/><polygon points="18,4 22,8 18,12" fill="currentColor"/></svg></span>
+<span class="fnode">LK<br>(lk_a)</span>
+<span class="farr"><svg width="24" height="16" viewBox="0 0 24 16"><line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5"/><polygon points="18,4 22,8 18,12" fill="currentColor"/></svg></span>
+<span class="fnode">Boot image<br>(boot_a)</span>
+<span class="farr"><svg width="24" height="16" viewBox="0 0 24 16"><line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5"/><polygon points="18,4 22,8 18,12" fill="currentColor"/></svg></span>
+<span class="fnode">Android</span>
 </div>
 
 <h3>LK Startup Sequence</h3>
@@ -451,44 +184,144 @@ Preloader (BootROM) → LK (lk_a) → Boot image (boot_a) → Android
 
 <h3>Command Handler Flow</h3>
 
-<div class="ascii">
-fastboot oem unlock [token]
-    │
-    ├─ Check parameters
-    │   └─ "argument size is wrong" (0x11c958)
-    │   └─ "command length is %d" (0x11c96c)
-    │
-    ├─ Read unlock_ability from SECCFG
-    │   └─ "unlock_ability = %d" (0x11c91c)
-    │   └─ "unlock_allowed_flag_offset: 0x%llx" (0x11c904)
-    │   └─ "Failed to get unlock permission - Err:0x%x" (0x11c929)
-    │
-    ├─ Check if bootloader allows unlock
-    │   └─ unlock_ability == 0 → deny
-    │
-    ├─ User confirmation (if no token provided)
-    │   ├─ Show: "Unlock bootloader?" (0x11c56c)
-    │   ├─ "Or, device will power off in %ds"
-    │   ├─ "If you unlock the bootloader,you will be able to install custom operating"
-    │   ├─ "Yes (Volume UP):Unlock(may void warranty)" (0x11c764)
-    │   └─ "No (Volume Down):Do not unlock bootloader" (0x11c794)
-    │
-    ├─ Token verification (if token provided)
-    │   └─ mi_gen_unlock_token → miunlock verity → token SN verify
-    │
-    ├─ Data wipe
-    │   └─ unlock_erase (0x11c514) → factory reset
-    │   └─ "To prevent unauthorized access to your personal data,unlocking the bootloader"
-    │
-    ├─ Set lock state
-    │   ├─ mi_set_lock_state(STATE_UNLOCKED)
-    │   ├─ seccfg_set_lock_state(STATE_UNLOCKED)
-    │   └─ "set lock failed - Err:0x%x" (0x11ca00)
-    │
-    ├─ ATF hardware lock
-    │   └─ set_hw_locked_in_atf(0) → SMC call to TrustZone
-    │
-    └─ Reboot
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-node"><span class="fnode accent sm">fastboot oem unlock [token]</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">Check parameters</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;argument size is wrong&quot; (0x11c958)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;command length is %d&quot; (0x11c96c)</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">Read unlock_ability from SECCFG</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;unlock_ability = %d&quot; (0x11c91c)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;unlock_allowed_flag_offset: 0x%llx&quot; (0x11c904)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode err dim sm">&quot;Failed to get unlock permission - Err:0x%x&quot; (0x11c929)</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">Check if bootloader allows unlock</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode err sm">unlock_ability == 0 → deny</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">User confirmation (if no token provided)</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">Show: &quot;Unlock bootloader?&quot; (0x11c56c)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;Or, device will power off in %ds&quot;</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;If you unlock the bootloader,you will be able to install custom operating&quot;</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;Yes (Volume UP):Unlock(may void warranty)&quot; (0x11c764)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;No (Volume Down):Do not unlock bootloader&quot; (0x11c794)</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">Token verification (if token provided)</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">mi_gen_unlock_token → miunlock verity → token SN verify</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">Data wipe</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">unlock_erase (0x11c514) → factory reset</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;To prevent unauthorized access to your personal data,unlocking the bootloader&quot;</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">Set lock state</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">mi_set_lock_state(STATE_UNLOCKED)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">seccfg_set_lock_state(STATE_UNLOCKED)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode err dim sm">&quot;set lock failed - Err:0x%x&quot; (0x11ca00)</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">ATF hardware lock</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">set_hw_locked_in_atf(0) → SMC call to TrustZone</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode warn sm">Reboot</span></div>
+</div>
+</div>
 </div>
 
 <hr>
@@ -499,22 +332,21 @@ fastboot oem unlock [token]
 
 <h3>API Surface</h3>
 
-<div class="api-box">
-<pre>┌─────────────────────────────────────────────────┐
-│              MiCustom Interface                  │
-├─────────────────────────────────────────────────┤
-│ mi_get_lock_state()       → reads lock state    │
-│ mi_set_lock_state(state)  → writes lock state   │
-│ mi_gen_unlock_token()     → generates token     │
-│ miunlock verity()         → verifies token      │
-│ miunlock set sigdata()    → stores signature    │
-│ mi_check_magic()          → checks RPMB magic   │
-│ mi_get_magic()            → reads RPMB magic    │
-│ mi_set_magic()            → writes RPMB magic   │
-│ mi_get_sig()              → reads signature     │
-│ mi_set_sig()              → writes signature    │
-│ Custom_error_process()    → error handler       │
-└─────────────────────────────────────────────────┘</pre>
+<div class="api-dash">
+<div class="api-dash-header"><span style="font-size:1.1em;opacity:0.7">◆</span> MiCustom Interface</div>
+<div class="api-dash-body">
+<div class="api-fn-card"><span class="api-fn-dot get"></span><span class="api-fn-name">mi_get_lock_state()</span><span class="api-fn-desc">reads lock state</span></div>
+<div class="api-fn-card"><span class="api-fn-dot set"></span><span class="api-fn-name">mi_set_lock_state(state)</span><span class="api-fn-desc">writes lock state</span></div>
+<div class="api-fn-card"><span class="api-fn-dot action"></span><span class="api-fn-name">mi_gen_unlock_token()</span><span class="api-fn-desc">generates token</span></div>
+<div class="api-fn-card"><span class="api-fn-dot action"></span><span class="api-fn-name">miunlock verity()</span><span class="api-fn-desc">verifies token</span></div>
+<div class="api-fn-card"><span class="api-fn-dot set"></span><span class="api-fn-name">miunlock set sigdata()</span><span class="api-fn-desc">stores signature</span></div>
+<div class="api-fn-card"><span class="api-fn-dot get"></span><span class="api-fn-name">mi_check_magic()</span><span class="api-fn-desc">checks RPMB magic</span></div>
+<div class="api-fn-card"><span class="api-fn-dot get"></span><span class="api-fn-name">mi_get_magic()</span><span class="api-fn-desc">reads RPMB magic</span></div>
+<div class="api-fn-card"><span class="api-fn-dot set"></span><span class="api-fn-name">mi_set_magic()</span><span class="api-fn-desc">writes RPMB magic</span></div>
+<div class="api-fn-card"><span class="api-fn-dot get"></span><span class="api-fn-name">mi_get_sig()</span><span class="api-fn-desc">reads signature</span></div>
+<div class="api-fn-card"><span class="api-fn-dot set"></span><span class="api-fn-name">mi_set_sig()</span><span class="api-fn-desc">writes signature</span></div>
+<div class="api-fn-card"><span class="api-fn-dot err"></span><span class="api-fn-name">Custom_error_process()</span><span class="api-fn-desc">error handler</span></div>
+</div>
 </div>
 
 <h3>Function Details</h3>
@@ -559,22 +391,65 @@ fastboot oem unlock [token]
 
 <h3>MiCustom Token Flow</h3>
 
-<div class="ascii">
-fastboot oem unlock &lt;token&gt;
-    │
-    ├─ miunlock verity()
-    │   ├─ Decode base64 token
-    │   ├─ Extract signature and device SN
-    │   ├─ RSA verify: hash(device_id) == decrypted(signature)
-    │   │   ├─ RSA modulus: stored in binary at 0xa85c0 (272 bytes)
-    │   │   └─ RSA exponent: 0x10001 (65537, standard)
-    │   ├─ "token SN verify success" or "token sig not same"
-    │   └─ Return result
-    │
-    ├─ miunlock set sigdata()
-    │   └─ Store verified signature in RPMB for audit
-    │
-    └─ mi_set_lock_state(UNLOCKED)
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-node"><span class="fnode accent sm">fastboot oem unlock &lt;token&gt;</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">miunlock verity()</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">Decode base64 token</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">Extract signature and device SN</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">RSA verify: hash(device_id) == decrypted(signature)</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">RSA modulus: stored in binary at 0xa85c0 (272 bytes)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">RSA exponent: 0x10001 (65537, standard)</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">&quot;token SN verify success&quot; or &quot;token sig not same&quot;</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">Return result</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">miunlock set sigdata()</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">Store verified signature in RPMB for audit</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode ok sm">mi_set_lock_state(UNLOCKED)</span></div>
+</div>
+</div>
 </div>
 
 <hr>
@@ -585,51 +460,102 @@ fastboot oem unlock &lt;token&gt;
 
 <h3>Storage Structure</h3>
 
-<div class="ascii">
-seccfg partition layout:
-├── SECCFG_MAGIC (4 bytes) - validation magic
-├── lock_state (uint32)
-│   0 = LOCKED (STATE_LOCKED)
-│   1 = UNLOCKABLE (STATE_UNLOCKABLE, can be unlocked)
-│   2 = UNLOCKED (STATE_UNLOCKED)
-├── unlock_ability (uint32) - permission flag
-├── dm_verity_state
-│   └─ seccfg_get_dm_verity_state / seccfg_set_dm_verity_state
-└── backup copy (redundant storage)
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">seccfg partition layout</div>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">SECCFG_MAGIC (4 bytes) — validation magic</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">lock_state (uint32)</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">0 = LOCKED (STATE_LOCKED)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">1 = UNLOCKABLE (STATE_UNLOCKABLE, can be unlocked)</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">2 = UNLOCKED (STATE_UNLOCKED)</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">unlock_ability (uint32) — permission flag</span></div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode sm">dm_verity_state</span>
+<div class="ftree">
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">seccfg_get_dm_verity_state / seccfg_set_dm_verity_state</span></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ftree-item">
+<div class="ftree-line end"><span class="tee"></span></div>
+<div class="ftree-node"><span class="fnode dim sm">backup copy (redundant storage)</span></div>
+</div>
+</div>
+</div>
 </div>
 
 <h3>Functions</h3>
 
-<div class="ascii">
-seccfg initialization:
-├─ "Initializing seccfg major" (0x1371e8)
-├─ "Initializing seccfg bak" (0x13720c)
-├─ "Initializing seccfg major NV" (0x137074)
-├─ "Initializing seccfg bak NV" (0x137098)
-├─ "Show seccfg status" (0x1370bc)
-├─ "seccfg not found!" (0x13722c)
-└─ "fatal error!" (0x137250)
-
-Seccfg validation:
-├─ SECCFG_MAGIC_CORRECT / SECCFG_MAGIC_INCORRECT
-├─ SECCFG_VALID / SECCFG_NOT_VALID
-└─ Both major and backup copies validated
-
-Seccfg operations:
-├─ seccfg_get_lock_state() - read lock state
-├─ seccfg_set_lock_state(state) - write lock state
-├─ seccfg_get_dm_verity_state()
-└─ seccfg_set_dm_verity_state()
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">seccfg initialization</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Initializing seccfg major&quot; (0x1371e8)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Initializing seccfg bak&quot; (0x13720c)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Initializing seccfg major NV&quot; (0x137074)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Initializing seccfg bak NV&quot; (0x137098)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Show seccfg status&quot; (0x1370bc)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">&quot;seccfg not found!&quot; (0x13722c)</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">&quot;fatal error!&quot; (0x137250)</span></div></div>
+</div>
+</div>
+<div class="fbox">
+<div class="fbox-title">Seccfg validation</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">SECCFG_MAGIC_CORRECT / SECCFG_MAGIC_INCORRECT</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">SECCFG_VALID / SECCFG_NOT_VALID</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Both major and backup copies validated</span></div></div>
+</div>
+</div>
+<div class="fbox">
+<div class="fbox-title">Seccfg operations</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">seccfg_get_lock_state() — read lock state</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">seccfg_set_lock_state(state) — write lock state</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">seccfg_get_dm_verity_state()</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">seccfg_set_dm_verity_state()</span></div></div>
+</div>
+</div>
 </div>
 
 <h3>Error Handling</h3>
 
-<div class="ascii">
-Custom_error_process(err, cust_state, seccfg_state):
-    Format: "%s: err: 0x%x, cust_state: %d, seccfg_state: %d"
-    ├─ "Seccfg set lock state failed!" (0xa7e64)
-    ├─ "Custom set lock state failed!" (0xa7e84)
-    └─ Params: error code, MiCustom state, seccfg state
+<div class="flow">
+<div class="fbox hl">
+<div class="fbox-title">Custom_error_process(err, cust_state, seccfg_state)</div>
+<div class="flabel">Format: &quot;%s: err: 0x%x, cust_state: %d, seccfg_state: %d&quot;</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">&quot;Seccfg set lock state failed!&quot; (0xa7e64)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">&quot;Custom set lock state failed!&quot; (0xa7e84)</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Params: error code, MiCustom state, seccfg state</span></div></div>
+</div>
+</div>
 </div>
 
 <hr>
@@ -708,23 +634,29 @@ Custom_error_process(err, cust_state, seccfg_state):
 
 <h3>RPMB Key Programming</h3>
 
-<div class="ascii">
-┌──────────────────────────────────────────────┐
-│ RPMB Authentication Key Programming          │
-├──────────────────────────────────────────────┤
-│ "1st time run RPMB Lock, write magic"        │
-│ rpmb_authen_read_counter()                   │
-│ rpmb_authen_secure_write_protect_conf_block_ │
-│   check() / read() / write()                 │
-│ ufshcd_authen_data_write_rsp_check()         │
-│ rpmb_get_mac()                               │
-├──────────────────────────────────────────────┤
-│ Results:                                     │
-│ "[PASS]Authentication Key Program Success"    │
-│ "[Failed]Authentication Key not Programed"    │
-│ "Authentication failure(MAC not match)"      │
-│ "Authentication key not yet programmed"      │
-└──────────────────────────────────────────────┘
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">RPMB Authentication Key Programming</div>
+<div class="fv">
+<div class="fv-row"><span class="fnode dim sm">&quot;1st time run RPMB Lock, write magic&quot;</span></div>
+<div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20"><line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5"/><polygon points="4,14 6,18 8,14" fill="currentColor"/></svg></div>
+<div class="fv-row"><span class="fnode sm">rpmb_authen_read_counter()</span></div>
+<div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20"><line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5"/><polygon points="4,14 6,18 8,14" fill="currentColor"/></svg></div>
+<div class="fv-row"><span class="fnode sm">rpmb_authen_secure_write_protect_conf_block_<br>check() / read() / write()</span></div>
+<div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20"><line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5"/><polygon points="4,14 6,18 8,14" fill="currentColor"/></svg></div>
+<div class="fv-row"><span class="fnode sm">ufshcd_authen_data_write_rsp_check()</span></div>
+<div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20"><line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5"/><polygon points="4,14 6,18 8,14" fill="currentColor"/></svg></div>
+<div class="fv-row"><span class="fnode sm">rpmb_get_mac()</span></div>
+</div>
+<div class="fgap"></div>
+<div class="fbox-title">Results</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok sm">[PASS] Authentication Key Program Success</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err sm">[Failed] Authentication Key not Programed</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err sm">Authentication failure(MAC not match)</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode warn sm">Authentication key not yet programmed</span></div></div>
+</div>
+</div>
 </div>
 
 <h3>RPMB Unlock Token Storage</h3>
@@ -738,14 +670,18 @@ Custom_error_process(err, cust_state, seccfg_state):
 
 <h3>Write Protection</h3>
 
-<div class="ascii">
-Write protection configuration:
-├─ mmc_set_boot_wp() / mmc_set_user_wp()
-├─ ufs_set_write_protect() / ufs_clr_write_protect()
-├─ rpmb_ufs_set_wp() / rpmb_ufs_clr_wp()
-├─ [Part_WP]WP Range: start→end partition write protect
-├─ US_PWR_WP_DIS / US_PERM_WP_DIS - power-on/perm write protect
-└─ EXT_CSD_BOOT_WP - eMMC boot partition write protect
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">Write protection configuration</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">mmc_set_boot_wp() / mmc_set_user_wp()</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">ufs_set_write_protect() / ufs_clr_write_protect()</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">rpmb_ufs_set_wp() / rpmb_ufs_clr_wp()</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">[Part_WP] WP Range: start→end partition write protect</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">US_PWR_WP_DIS / US_PERM_WP_DIS — power-on/perm write protect</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">EXT_CSD_BOOT_WP — eMMC boot partition write protect</span></div></div>
+</div>
+</div>
 </div>
 
 <hr>
@@ -756,66 +692,86 @@ Write protection configuration:
 
 <h3>Included AVB Components</h3>
 
-<div class="ascii">
-Dlplatform/common/avb/libavb/
-├── avb_slot_verify.c        - Slot verification logic
-├── avb_vbmeta_image.c       - VBMeta image parsing
-├── avb_hash_descriptor.c    - Hash tree descriptors
-├── avb_hashtree_descriptor.c - Hash tree management
-├── avb_chain_partition_descriptor.c - Chained partitions
-├── avb_rsa.c                - RSA signature verification
-├── avb_util.c               - Utility functions
-├── avb_cmdline.c            - Kernel cmdline generation
-└── avb_footer.c             - Footer parsing
-
-platform/common/boot/
-├── avb20/avb_cmdline.c      - Platform cmdline setup
-└── boot_info.c              - Boot info handling
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">platform/common/avb/libavb/</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_slot_verify.c — Slot verification logic</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_vbmeta_image.c — VBMeta image parsing</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_hash_descriptor.c — Hash tree descriptors</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_hashtree_descriptor.c — Hash tree management</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_chain_partition_descriptor.c — Chained partitions</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_rsa.c — RSA signature verification</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_util.c — Utility functions</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_cmdline.c — Kernel cmdline generation</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb_footer.c — Footer parsing</span></div></div>
+</div>
+</div>
+<div class="fbox">
+<div class="fbox-title">platform/common/boot/</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">avb20/avb_cmdline.c — Platform cmdline setup</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">boot_info.c — Boot info handling</span></div></div>
+</div>
+</div>
 </div>
 
 <h3>Boot States</h3>
 
-<div class="ascii">
-verifiedbootstate string (set by AVB after verification):
-
-    androidboot.verifiedbootstate=GREEN
-        - Device locked, OS verified, no tampering
-        - Normal boot
-
-    androidboot.verifiedbootstate=YELLOW
-        - Device locked, OS signed with dev key
-
-    androidboot.verifiedbootstate=ORANGE
-        - Device unlocked
-        - Warning displayed: orange_state_warning (0xa855d)
-        - Red/Danger state if verification fails
-
-    androidboot.verifiedbootstate=RED
-        - Verification failed / tampered
-        - Warning displayed: red_state_warning (0xa856c)
+<div class="flow">
+<div class="flabel">verifiedbootstate string (set by AVB after verification):</div>
+<div class="fv">
+<div class="fv-row">
+<span class="fnode ok"><code>androidboot.verifiedbootstate=GREEN</code></span>
+</div>
+<div class="flabel" style="padding-left:24px">Device locked, OS verified, no tampering — Normal boot</div>
+<div class="fgap"></div>
+<div class="fv-row">
+<span class="fnode warn"><code>androidboot.verifiedbootstate=YELLOW</code></span>
+</div>
+<div class="flabel" style="padding-left:24px">Device locked, OS signed with dev key</div>
+<div class="fgap"></div>
+<div class="fv-row">
+<span class="fnode accent"><code>androidboot.verifiedbootstate=ORANGE</code></span>
+</div>
+<div class="flabel" style="padding-left:24px">Device unlocked — Warning displayed: orange_state_warning (0xa855d)</div>
+<div class="fgap"></div>
+<div class="fv-row">
+<span class="fnode err"><code>androidboot.verifiedbootstate=RED</code></span>
+</div>
+<div class="flabel" style="padding-left:24px">Verification failed / tampered — Warning displayed: red_state_warning (0xa856c)</div>
+</div>
 </div>
 
 <h3>Boot State Display</h3>
 
-<div class="ascii">
-lk logo warnings:
-├─ "[lk logo: %s %d orange_state_warning]" (0xa855d)
-├─ "[lk logo: %s %d red_state_warning]" (0xa856c)
-└─ mt_disp_show_unlock_boot_logo() - displays unlock icon
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">lk logo warnings</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode warn dim sm">[lk logo: %s %d orange_state_warning] (0xa855d)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">[lk logo: %s %d red_state_warning] (0xa856c)</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">mt_disp_show_unlock_boot_logo() — displays unlock icon</span></div></div>
+</div>
+</div>
 </div>
 
 <h3>Image Verification</h3>
 
-<div class="ascii">
-Image verification chain:
-├─ "Verify %s cert chain cost %d ms"
-├─ "Verify %s image hash cost %d ms"
-├─ "[%s] img %s auth pass" / "[%s] img %s auth fail (0x%x)"
-├─ SECLIB_IMG_VERIFY - security library image verification
-├─ pubk auth fail / pubk auth pass
-├─ "Error while checking public key used to sign data"
-├─ "ERROR_PUBLIC_KEY_REJECTED"
-└─ "Authentication failure(MAC not match)"
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">Image verification chain</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Verify %s cert chain cost %d ms&quot;</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Verify %s image hash cost %d ms&quot;</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">[%s] img %s auth pass / [%s] img %s auth fail (0x%x)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">SECLIB_IMG_VERIFY — security library image verification</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">pubk auth fail / pubk auth pass</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">&quot;Error while checking public key used to sign data&quot;</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">ERROR_PUBLIC_KEY_REJECTED</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">Authentication failure(MAC not match)</span></div></div>
+</div>
+</div>
 </div>
 
 <hr>
@@ -865,12 +821,16 @@ Image verification chain:
 
 <h3>Token Structure</h3>
 
-<div class="ascii">
-Unlock token format:
-├─ Base64 encoded (charset: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
-├─ Contains: device SN + RSA signature
-├─ Size: sig_len variable ("no sig stored", "sig_len = %d")
-└─ Verified against: hash(ufsid) + cpuid + serial number
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">Unlock token format</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Base64 encoded</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Contains: device SN + RSA signature</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Size: sig_len variable (&quot;no sig stored&quot;, &quot;sig_len = %d&quot;)</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Verified against: hash(ufsid) + cpuid + serial number</span></div></div>
+</div>
+</div>
 </div>
 
 <h3>Hash</h3>
@@ -887,11 +847,13 @@ Unlock token format:
 <details class="phase" id="phase1">
 <summary>Phase 1: Command Reception</summary>
 <div class="phase-content">
-<div class="ascii">
-fastboot oem unlock [data|token]
-├─ fastboot parses command
-├─ Matches "-fastboot_oem_lock" command handler
-└─ Enters unlock handler with [data] parameter
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode accent sm">fastboot oem unlock [data|token]</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">fastboot parses command</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Matches &quot;-fastboot_oem_lock&quot; command handler</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Enters unlock handler with [data] parameter</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -899,15 +861,24 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase2">
 <summary>Phase 2: Permission Check</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ Check unlock_ability from SECCFG
-│   ├─ Read unlock_allowed_flag_offset
-│   └─ If unlock_ability == 0 → "Failed to get unlock permission" → DENY
-├─ Read device lock state
-│   ├─ mi_get_lock_state()
-│   │   └─ MiCustom Get LockState → seccfg_get_lock_state()
-│   └─ If already unlocked → no action needed
-└─ If locked with unlock ability → continue
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">Check unlock_ability from SECCFG</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Read unlock_allowed_flag_offset</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err sm">If unlock_ability == 0 → &quot;Failed to get unlock permission&quot; → DENY</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">Read device lock state</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">mi_get_lock_state()</span>
+<div class="ftree"><div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">MiCustom Get LockState → seccfg_get_lock_state()</span></div></div></div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">If already unlocked → no action needed</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok sm">If locked with unlock ability → continue</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -915,13 +886,18 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase3">
 <summary>Phase 3: User Confirmation <span style="font-weight:400;color:var(--text2);font-size:0.85em;">(if no token)</span></summary>
 <div class="phase-content">
-<div class="ascii">
-├─ Display: "Unlock bootloader?"
-├─ Warning: data will be wiped
-├─ Wait for volume key input
-│   ├─ Volume UP → continue unlock
-│   └─ Volume Down / timeout → cancel
-└─ Power-off countdown on timeout
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">Display: &quot;Unlock bootloader?&quot;</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode warn sm">Warning: data will be wiped</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">Wait for volume key input</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok sm">Volume UP → continue unlock</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err sm">Volume Down / timeout → cancel</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Power-off countdown on timeout</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -929,19 +905,27 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase4">
 <summary>Phase 4: Token Verification</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ miunlock verity(unlock_data)
-│   ├─ Validate input: "wrong unlock data"
-│   ├─ Decode base64 token
-│   ├─ Extract serial number + signature
-│   ├─ Compute hash(ufsid + cpuid + serial)
-│   ├─ RSA verify: signature == hash
-│   │   ├─ rsa_exptmod(public_key, signature)
-│   │   ├─ padding_unpad(result)
-│   │   └─ compare(hash, result)
-│   ├─ "token SN verify success" → PASS
-│   └─ "token sig not same" → FAIL → "Unlock failed - Err:0x%x"
-└─ On verify failure → abort
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">miunlock verity(unlock_data)</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">Validate input: &quot;wrong unlock data&quot;</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Decode base64 token</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Extract serial number + signature</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Compute hash(ufsid + cpuid + serial)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">RSA verify: signature == hash</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">rsa_exptmod(public_key, signature)</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">padding_unpad(result)</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">compare(hash, result)</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok sm">&quot;token SN verify success&quot; → PASS</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err sm">&quot;token sig not same&quot; → FAIL → &quot;Unlock failed - Err:0x%x&quot;</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err sm">On verify failure → abort</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -949,12 +933,17 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase5">
 <summary>Phase 5: Data Wipe</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ unlock_erase()
-│   ├─ Wipe userdata partition
-│   └─ "factory data reset"
-├─ Display: "To prevent unauthorized access to your personal data,unlocking the bootloader"
-└─ Clear personal data
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">unlock_erase()</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Wipe userdata partition</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;factory data reset&quot;</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Display: &quot;To prevent unauthorized access to your personal data,unlocking the bootloader&quot;</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Clear personal data</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -962,19 +951,29 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase6">
 <summary>Phase 6: State Transition</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ mi_set_lock_state(STATE_UNLOCKED)
-│   ├─ Validate state transition
-│   ├─ seccfg_set_lock_state(UNLOCKED)
-│   │   ├─ Read SECCFG block
-│   │   ├─ Validate magic + checksum
-│   │   ├─ Write unlock state
-│   │   ├─ Write backup copy
-│   │   └─ Verify write ("Major SECCFG_VALID", "Bak SECCFG_VALID")
-│   └─ Error: "Seccfg set lock state failed!" / "Custom set lock state failed!"
-├─ miunlock set sigdata(token_signature)
-│   └─ Store unlock token in RPMB audit trail
-└─ "Set_RTC_Fastboot_Mode" → RTC flag for next boot
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">mi_set_lock_state(STATE_UNLOCKED)</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Validate state transition</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">seccfg_set_lock_state(UNLOCKED)</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Read SECCFG block</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Validate magic + checksum</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Write unlock state</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Write backup copy</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok dim sm">Verify write (&quot;Major SECCFG_VALID&quot;, &quot;Bak SECCFG_VALID&quot;)</span></div></div>
+</div>
+</div></div>
+</div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode err dim sm">Error: &quot;Seccfg set lock state failed!&quot; / &quot;Custom set lock state failed!&quot;</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">miunlock set sigdata(token_signature)</span>
+<div class="ftree"><div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Store unlock token in RPMB audit trail</span></div></div></div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">&quot;Set_RTC_Fastboot_Mode&quot; → RTC flag for next boot</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -982,16 +981,24 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase7">
 <summary>Phase 7: ATF Hardware State</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ set_hw_locked_in_atf(0)   // 0 = unlocked
-│   ├─ Prepare SMC call to TrustZone
-│   ├─ "[Sec] We are going to enter ATF for smc call"
-│   ├─ SMC #x → ATF secure monitor
-│   │   ├─ FID: 0xC20000xx / 0x820000xx
-│   │   ├─ Args: unlock_state, flags
-│   │   └─ ATF writes hardware fuse/register
-│   └─ "[Sec] We are back from ATF"
-└─ Hardware lock state now reflects unlocked
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">set_hw_locked_in_atf(0) // 0 = unlocked</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Prepare SMC call to TrustZone</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">[Sec] We are going to enter ATF for smc call</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">SMC #x → ATF secure monitor</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">FID: 0xC20000xx / 0x820000xx</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Args: unlock_state, flags</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">ATF writes hardware fuse/register</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">[Sec] We are back from ATF</span></div></div>
+</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok sm">Hardware lock state now reflects unlocked</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -999,13 +1006,17 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase8">
 <summary>Phase 8: Boot State Update</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ Set kernel cmdline:
-│   └─ androidboot.verifiedbootstate=orange
-├─ AVB state: allow_unverified_slots = true
-├─ Set lock_state in SECPOLICY
-│   └─ "[SEC_POLICY] lock_state = UNLOCKED"
-└─ Display: orange_state_warning at boot logo
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">Set kernel cmdline</span>
+<div class="ftree"><div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode accent dim sm">androidboot.verifiedbootstate=orange</span></div></div></div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">AVB state: allow_unverified_slots = true</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">Set lock_state in SECPOLICY</span>
+<div class="ftree"><div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">[SEC_POLICY] lock_state = UNLOCKED</span></div></div></div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode warn sm">Display: orange_state_warning at boot logo</span></div></div>
+</div>
 </div>
 </div>
 </details>
@@ -1013,13 +1024,18 @@ fastboot oem unlock [data|token]
 <details class="phase" id="phase9">
 <summary>Phase 9: Reboot</summary>
 <div class="phase-content">
-<div class="ascii">
-├─ Save RTC fastboot flag
-├─ Reboot device
-└─ LK reloads → detects unlocked state
-    ├─ Skips AVB verification
-    ├─ Sets ORANGE boot state
-    └─ Allows custom images
+<div class="flow">
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-node"><span class="fnode sm">Save RTC fastboot flag</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">Reboot device</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">LK reloads → detects unlocked state</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Skips AVB verification</span></div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Sets ORANGE boot state</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Allows custom images</span></div></div>
+</div>
+</div></div>
+</div>
 </div>
 </div>
 </details>
@@ -1028,86 +1044,93 @@ fastboot oem unlock [data|token]
 
 <h3 id="lock-states">Lock State Values</h3>
 
-<div class="ascii">
-SECCFG lock_state:
-  0 = LOCKED
-      - Full AVB verification enforced
-      - verifiedbootstate=green
-      - Only signed official images boot
-      - fastboot oem unlock → "Unlock bootloader?"
-
-  1 = UNLOCKABLE (bootloader allows unlock)
-      - Can transition to UNLOCKED with valid token
-      - Verified by unlock_ability flag in SECCFG
-
-  2 = UNLOCKED
-      - AVB verification disabled
-      - verifiedbootstate=orange
-      - Warning displayed at boot
-      - Custom images allowed
-      - fastboot oem lock → "Lock bootloader?"
-
-  3 = LOCKED_CRITICAL (if implemented by OEM)
+<div class="flow">
+<div class="fbox">
+<div class="fbox-title">SECCFG lock_state</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">0 = LOCKED</span>
+<div class="flabel" style="padding-left:24px">Full AVB verification enforced</div>
+<div class="flabel" style="padding-left:24px">verifiedbootstate=green</div>
+<div class="flabel" style="padding-left:24px">Only signed official images boot</div>
+<div class="flabel" style="padding-left:24px">fastboot oem unlock → &quot;Unlock bootloader?&quot;</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode warn sm">1 = UNLOCKABLE (bootloader allows unlock)</span>
+<div class="flabel" style="padding-left:24px">Can transition to UNLOCKED with valid token</div>
+<div class="flabel" style="padding-left:24px">Verified by unlock_ability flag in SECCFG</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line"><span class="tee"></span></div><div class="ftree-node"><span class="fnode ok sm">2 = UNLOCKED</span>
+<div class="flabel" style="padding-left:24px">AVB verification disabled</div>
+<div class="flabel" style="padding-left:24px">verifiedbootstate=orange</div>
+<div class="flabel" style="padding-left:24px">Warning displayed at boot</div>
+<div class="flabel" style="padding-left:24px">Custom images allowed</div>
+<div class="flabel" style="padding-left:24px">fastboot oem lock → &quot;Lock bootloader?&quot;</div>
+</div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">3 = LOCKED_CRITICAL (if implemented by OEM)</span></div></div>
+</div>
+</div>
 </div>
 
 <h3 id="data-flow">Data Flow Diagram</h3>
 
-<div class="ascii">
-fastboot oem unlock [token]
-    │
-    ▼
-┌───────────────────────────────────────────────────────┐
-│             fastboot command handler                   │
-│  (file 0x11c500 area, -fastboot_oem_lock)             │
-└───────────────────────┬───────────────────────────────┘
-                        │
-                        ▼
-┌───────────────────────────────────────────────────────┐
-│           MiCustom unlock token verification           │
-│  ┌─────────────────┐    ┌──────────────────────────┐   │
-│  │ miunlock verity │◄──►│ RSA public key (0xa85c0) │   │
-│  │                 │    └──────────────────────────┘   │
-│  │ SHA256(UFSID)   │    ┌──────────────────────────┐   │
-│  │ + cpuid + SN   │◄──►│       Token from host     │   │
-│  └────────┬────────┘    └──────────────────────────┘   │
-└───────────┬───────────────────────────────────────────┘
-            │
-            ▼
-┌───────────────────────────────────────────────────────┐
-│               SECCFG Update                            │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │ seccfg_set_lock_state(UNLOCKED)                  │  │
-│  │   → Write NVRAM/seccfg partition                 │  │
-│  │   → Write backup copy                            │  │
-│  │   → Validate magic + CRC32                       │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────┬───────────────────────────────┘
-                        │
-                        ▼
-┌───────────────────────────────────────────────────────┐
-│               ATF TrustZone Call                       │
-│  SMC #x with FID 0xC2000000 / 0x82000000              │
-│  set_hw_locked_in_atf(0) → hardware unlock            │
-└───────────────────────┬───────────────────────────────┘
-                        │
-                        ▼
-┌───────────────────────────────────────────────────────┐
-│               RPMB Audit Trail                         │
-│  mi_set_sig(token) → store in RPMB partition          │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │ RPMB Write: {magic, timestamp, signature}        │  │
-│  │ MAC verify → HMAC(key, data)                     │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────┬───────────────────────────────┘
-                        │
-                        ▼
-┌───────────────────────────────────────────────────────┐
-│               Reboot + AVB State                       │
-│  cmdline: androidboot.verifiedbootstate=orange         │
-│  AVB: VERIFY_ALLOWED=NO → skip verification           │
-│  SECPOLICY: lock_state = UNLOCKED                     │
-│  Display: orange_state_warning at boot logo           │
-└───────────────────────────────────────────────────────┘
+<div class="flow">
+<div class="fv">
+<div class="fv-row"><span class="fnode accent sm">fastboot oem unlock [token]</span></div>
+<div class="farr-v"><svg width="12" height="24" viewBox="0 0 12 24"><line x1="6" y1="2" x2="6" y2="20" stroke="currentColor" stroke-width="1.5"/><polygon points="4,18 6,22 8,18" fill="currentColor"/></svg></div>
+<div class="fv-row"><div class="fbox">
+<div class="fbox-title">fastboot command handler</div>
+<div class="flabel">(file 0x11c500 area, -fastboot_oem_lock)</div>
+</div></div>
+<div class="farr-v"><svg width="12" height="24" viewBox="0 0 12 24"><line x1="6" y1="2" x2="6" y2="20" stroke="currentColor" stroke-width="1.5"/><polygon points="4,18 6,22 8,18" fill="currentColor"/></svg></div>
+<div class="fv-row"><div class="fbox hl">
+<div class="fbox-title">MiCustom unlock token verification</div>
+<div class="fchain" style="justify-content:center;margin:4px 0">
+<div class="fnode sm">miunlock verity</div>
+<span class="farr"><svg width="16" height="12" viewBox="0 0 16 12"><line x1="2" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.5"/><polygon points="11,3 14,6 11,9" fill="currentColor"/></svg></span>
+<div class="fnode sm">RSA public key (0xa85c0)</div>
+</div>
+<div class="fchain" style="justify-content:center;margin:4px 0">
+<div class="fnode sm">SHA256(UFSID) + cpuid + SN</div>
+<span class="farr"><svg width="16" height="12" viewBox="0 0 16 12"><line x1="2" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.5"/><polygon points="11,3 14,6 11,9" fill="currentColor"/></svg></span>
+<div class="fnode sm">Token from host</div>
+</div>
+</div></div>
+<div class="farr-v"><svg width="12" height="24" viewBox="0 0 12 24"><line x1="6" y1="2" x2="6" y2="20" stroke="currentColor" stroke-width="1.5"/><polygon points="4,18 6,22 8,18" fill="currentColor"/></svg></div>
+<div class="fv-row"><div class="fbox warn">
+<div class="fbox-title">SECCFG Update</div>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode sm">seccfg_set_lock_state(UNLOCKED)</span>
+<div class="ftree">
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Write NVRAM/seccfg partition</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Write backup copy</span></div></div>
+<div class="ftree-item"><div class="ftree-line end"><span class="tee"></span></div><div class="ftree-node"><span class="fnode dim sm">Validate magic + CRC32</span></div></div>
+</div>
+</div></div>
+</div>
+</div></div>
+<div class="farr-v"><svg width="12" height="24" viewBox="0 0 12 24"><line x1="6" y1="2" x2="6" y2="20" stroke="currentColor" stroke-width="1.5"/><polygon points="4,18 6,22 8,18" fill="currentColor"/></svg></div>
+<div class="fv-row"><div class="fbox accent">
+<div class="fbox-title">ATF TrustZone Call</div>
+<div class="flabel">SMC #x with FID 0xC2000000 / 0x82000000</div>
+<div class="flabel">set_hw_locked_in_atf(0) → hardware unlock</div>
+</div></div>
+<div class="farr-v"><svg width="12" height="24" viewBox="0 0 12 24"><line x1="6" y1="2" x2="6" y2="20" stroke="currentColor" stroke-width="1.5"/><polygon points="4,18 6,22 8,18" fill="currentColor"/></svg></div>
+<div class="fv-row"><div class="fbox">
+<div class="fbox-title">RPMB Audit Trail</div>
+<div class="flabel">mi_set_sig(token) → store in RPMB partition</div>
+<div class="fbox" style="background:rgba(255,255,255,0.02)">
+<div class="flabel">RPMB Write: {magic, timestamp, signature}</div>
+<div class="flabel">MAC verify → HMAC(key, data)</div>
+</div>
+</div></div>
+<div class="farr-v"><svg width="12" height="24" viewBox="0 0 12 24"><line x1="6" y1="2" x2="6" y2="20" stroke="currentColor" stroke-width="1.5"/><polygon points="4,18 6,22 8,18" fill="currentColor"/></svg></div>
+<div class="fv-row"><div class="fbox ok">
+<div class="fbox-title">Reboot + AVB State</div>
+<div class="flabel">cmdline: androidboot.verifiedbootstate=orange</div>
+<div class="flabel">AVB: VERIFY_ALLOWED=NO → skip verification</div>
+<div class="flabel">SECPOLICY: lock_state = UNLOCKED</div>
+<div class="flabel">Display: orange_state_warning at boot logo</div>
+</div></div>
+</div>
 </div>
 
 <hr>
@@ -1149,59 +1172,7 @@ fastboot oem unlock [token]
 </div>
 </div>
 
-<script>
-(function() {
-  var toggle = document.getElementById('sidebarToggle');
-  var sidebar = document.getElementById('sidebar');
-  var overlay = document.getElementById('sidebarOverlay');
-
-  function openSidebar() {
-    sidebar.classList.add('open');
-    overlay.classList.add('open');
-  }
-  function closeSidebar() {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('open');
-  }
-  window.closeSidebar = closeSidebar;
-
-  toggle.addEventListener('click', function() {
-    if (sidebar.classList.contains('open')) { closeSidebar(); }
-    else { openSidebar(); }
-  });
-  overlay.addEventListener('click', closeSidebar);
-
-  var links = sidebar.querySelectorAll('a');
-  var sections = [];
-  links.forEach(function(link) {
-    var href = link.getAttribute('href');
-    if (href && href.startsWith('#')) {
-      sections.push(href.substring(1));
-    }
-  });
-
-  function updateActive() {
-    var scrollY = window.scrollY + 100;
-    var activeId = 'top';
-    sections.forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el && el.offsetTop <= scrollY) {
-        activeId = id;
-      }
-    });
-    links.forEach(function(link) {
-      var href = link.getAttribute('href');
-      link.classList.remove('active');
-      if (href === '#' + activeId) {
-        link.classList.add('active');
-      }
-    });
-  }
-
-  window.addEventListener('scroll', updateActive);
-  updateActive();
-})();
-</script>
+<script src="script.js"></script>
 
 </body>
 </html>
