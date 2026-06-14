@@ -1,969 +1,3515 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0d1117">
-<meta property="og:title" content="Анализ цепочки загрузки MT6877 — Сводный отчёт">
-<meta property="og:description" content="Xiaomi ruby (Dimensity 920) цепочка загрузки: BROM → Preloader → LK → Kernel. 7 уязвимостей, состояние efuse, анализ патчей и векторы атак.">
-<meta property="og:type" content="article">
-<meta property="og:site_name" content="Xiaomi MT6877 RE">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Анализ цепочки загрузки MT6877 — Сводный отчёт">
-<meta name="twitter:description" content="Xiaomi ruby (Dimensity 920) цепочка загрузки: BROM → Preloader → LK → Kernel. 7 уязвимостей, состояние efuse, анализ патчей и векторы атак.">
-<title>Анализ цепочки загрузки MT6877 — Сводный отчёт</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text2: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --orange: #d29922;
-    --red: #f85149;
-    --purple: #bc8cff;
-    --sidebar-w: 260px;
-  }
-  .ai-banner {
-    background: #d29922;
-    color: #0d1117;
-    text-align: center;
-    padding: 10px 20px;
-    font-size: 0.9em;
-    font-weight: 600;
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%;
-    z-index: 10000;
-    border-bottom: 2px solid #f0c040;
-    line-height: 1.4;
-  }
-  .ai-banner strong { color: #000; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.6;
-    display: flex;
-    min-height: 100vh;
-    padding-top: 56px;
-  }
-
-  /* Sidebar */
-  .sidebar {
-    position: fixed;
-    top: 56px; left: 0;
-    width: var(--sidebar-w);
-    height: calc(100vh - 56px);
-    background: var(--bg2);
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
-    padding: 20px 0;
-    z-index: 100;
-  }
-  .sidebar-title {
-    font-size: 0.85em;
-    font-weight: 700;
-    color: var(--accent);
-    padding: 0 16px 12px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .sidebar a {
-    display: block;
-    padding: 6px 16px;
-    color: var(--text2);
-    text-decoration: none;
-    font-size: 0.82em;
-    transition: background 0.15s, color 0.15s;
-    border-left: 2px solid transparent;
-  }
-  .sidebar a:hover,
-  .sidebar a:focus {
-    background: rgba(88,166,255,0.08);
-    color: var(--text);
-  }
-  .sidebar a.active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: rgba(88,166,255,0.06);
-  }
-  .sidebar-section {
-    margin-top: 4px;
-  }
-  .sidebar-section a { padding-left: 24px; font-size: 0.78em; }
-  .sidebar-toggle {
-    display: none;
-    position: fixed;
-    top: 62px; left: 12px;
-    z-index: 10001;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 1.2em;
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .sidebar-overlay { display: none; }
-
-  /* Main content */
-  .main {
-    margin-left: var(--sidebar-w);
-    flex: 1;
-    max-width: 960px;
-    padding: 40px 40px 60px;
-  }
-
-  .container { width: 100%; }
-
-  h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
-  h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 40px 0 16px; }
-  h3 { font-size: 1.15em; margin: 28px 0 12px; }
-  h4 { font-size: 1em; margin: 16px 0 8px; }
-  p { margin: 0 0 12px; }
-  a { color: var(--accent); }
-  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
-  .meta { color: var(--text2); font-size: 0.9em; margin-bottom: 24px; }
-  .meta span { display: inline-block; margin-right: 16px; }
-
-  /* Tables */
-  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.9em; }
-  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
-  th { background: var(--bg2); font-weight: 600; }
-  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-  td code, th code { font-size: 0.9em; }
-
-  /* Code blocks */
-  pre {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    overflow-x: auto;
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.85em;
-    line-height: 1.45;
-    margin: 12px 0 20px;
-    tab-size: 4;
-  }
-  code {
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.9em;
-    background: rgba(88,166,255,0.1);
-    padding: 2px 6px;
-    border-radius: 3px;
-  }
-  pre code {
-    background: none;
-    padding: 0;
-    border-radius: 0;
-  }
-
-  strong { color: #fff; }
-  .severity-critical { color: var(--red); font-weight: 700; }
-  .severity-high { color: var(--orange); font-weight: 700; }
-  .severity-medium { color: var(--purple); font-weight: 700; }
-
-  .ascii {
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.8em;
-    line-height: 1.3;
-    white-space: pre;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    overflow-x: auto;
-    margin: 12px 0 20px;
-  }
-
-  ul, ol { margin: 8px 0 16px; padding-left: 24px; }
-  li { margin-bottom: 4px; }
-  ul ul, ol ol { margin: 4px 0; }
-
-  .section-tag {
-    display: inline-block;
-    background: var(--accent);
-    color: #000;
-    font-size: 0.7em;
-    font-weight: 700;
-    padding: 1px 8px;
-    border-radius: 10px;
-    margin-right: 8px;
-    vertical-align: middle;
-  }
-
-  .vuln {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    margin: 16px 0;
-    background: var(--bg2);
-  }
-  .vuln h4 { margin-top: 0; }
-  .vuln-label { font-size: 0.8em; color: var(--text2); margin-bottom: 8px; }
-  .vuln-label span { margin-right: 16px; }
-
-  /* Downloads section */
-  .download-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
-    margin: 16px 0;
-  }
-  .download-card {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 14px;
-    background: var(--bg2);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .download-card .fn {
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.82em;
-    word-break: break-all;
-  }
-  .download-card .sz {
-    font-size: 0.78em;
-    color: var(--text2);
-  }
-  .download-card .desc {
-    font-size: 0.82em;
-    color: var(--text);
-    flex: 1;
-  }
-  .download-btn {
-    display: inline-block;
-    background: var(--accent);
-    color: #000;
-    font-weight: 600;
-    font-size: 0.82em;
-    padding: 6px 16px;
-    border-radius: 4px;
-    text-decoration: none;
-    text-align: center;
-    transition: opacity 0.15s;
-    align-self: flex-start;
-    margin-top: 4px;
-  }
-  .download-btn:hover { opacity: 0.85; }
-
-  /* Responsive */
-  @media (max-width: 800px) {
-    .sidebar {
-      transform: translateX(-100%);
-      transition: transform 0.25s;
-    }
-    .sidebar.open { transform: translateX(0); }
-    .sidebar-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      z-index: 99;
-    }
-    .sidebar-overlay.open { display: block; }
-    .sidebar-toggle { display: block; }
-    .main {
-      margin-left: 0;
-      padding: 60px 16px 40px;
-    }
-    table { font-size: 0.8em; }
-    th, td { padding: 6px 8px; }
-    .download-grid { grid-template-columns: 1fr; }
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d1117">
+  <meta property="og:title" content="Xiaomi Redmi Note 12 Pro 5G (ruby) — Сводный анализ цепочки загрузки и безопасности">
+  <meta property="og:description"
+    content="Полный сводный анализ: BROM, preloader, LK bootloader, AVB 2.0, MiCustom разблокировка, ATF TrustZone, RPMB, криптография, поверхность уязвимостей.">
+  <meta property="og:type" content="article">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>Xiaomi ruby — Сводный анализ</title>
+  <link rel="stylesheet" href="../bootloader/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/armasm.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/c.min.js"></script>
 </head>
+
 <body>
 
-<div class="ai-banner">
-  <strong>⚠ Контент создан ИИ</strong><br>
-  Вся статья создана ИИ. Вся информация получена через анализ с использованием реальных инструментов (дизассемблеры, hex-редакторы, mtkclient и т.д.) на реальных дампах прошивки.
-</div>
-
-<button class="sidebar-toggle" id="sidebarToggle" aria-label="Переключить навигацию">☰</button>
-<div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-<nav class="sidebar" id="sidebar">
-  <div class="sidebar-title">Разделы отчёта</div>
-  <a href="#top" onclick="closeSidebar()">Начало</a>
-  <a href="#inventory" onclick="closeSidebar()">Состав файлов</a>
-  <a href="#overview" onclick="closeSidebar()">Обзор цепочки загрузки</a>
-  <div class="sidebar-section">
-    <a href="#stage1" onclick="closeSidebar()">Этап 1: BROM</a>
-    <a href="#stage2" onclick="closeSidebar()">Этап 2: Preloader</a>
-    <a href="#stage3" onclick="closeSidebar()">Этап 3: LK</a>
+  <div class="ai-banner">
+    <strong>⚠ Содержимое создано ИИ</strong><br>
+    Вся статья создана ИИ. Вся информация получена ИИ при анализе с использованием реальных инструментов (дизассемблеров,
+    hex-редакторов, mtkclient и т.д.) на реальных дампах прошивки.
   </div>
-  <a href="#memmap" onclick="closeSidebar()">Карта памяти</a>
-  <a href="#patches" onclick="closeSidebar()">Анализ патчей</a>
-  <a href="#vulns" onclick="closeSidebar()">Поверхность уязвимостей</a>
-  <a href="#security" onclick="closeSidebar()">Архитектура безопасности</a>
-  <a href="#attacksurf" onclick="closeSidebar()">Поверхность атаки</a>
-  <a href="#attackpath" onclick="closeSidebar()">Вектор атаки</a>
-  <a href="#coldstorage" onclick="closeSidebar()">Примечание: Cold Storage</a>
-  <a href="#downloads" onclick="closeSidebar()" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;color:var(--green);font-weight:600;">Загрузки</a>
-</nav>
 
-<div class="main" id="top">
-<div class="container">
-
-<h1>Анализ цепочки загрузки Mediatek MT6877 — Сводный отчёт</h1>
-
-<div class="meta">
-<span>Устройство: Xiaomi ruby (Dimensity 920 / MT6877V)</span><br>
-<span>Создан: 2026-06-11</span>
-<span>Среда: WSL2 Ubuntu, arm-none-eabi-* toolchain, Python3, mtkclient</span><br>
-<span>Источники: ANALYSIS_PROGRESS.md, BOOTCHAIN_REPORT.md, RE_CONTEXT.md, VULNERABILITY_REPORT.md</span>
-</div>
-
-<hr>
-
-<h2 id="inventory">Состав файлов</h2>
-
-<table>
-<thead><tr><th>Файл</th><th>Размер</th><th>Роль</th><th>Режим процессора</th></tr></thead>
-<tbody>
-<tr><td><code>brom_MT6877_MT6877V_MT8791N_959.bin</code></td><td>128 КБ (131072 B)</td><td>BROM (Boot ROM в кремнии SoC)</td><td>ARM (векторы), Thumb (основной)</td></tr>
-<tr><td><code>preloader_ruby.bin</code></td><td>472756 B</td><td>Preloader (второй этап)</td><td>Thumb2</td></tr>
-<tr><td><code>preloader_ruby_patched.bin</code></td><td>472756 B</td><td>Патченый preloader — NOP в местах вызова</td><td>Thumb2</td></tr>
-<tr><td><code>preloader_ruby_patched_local.bin</code></td><td>472756 B</td><td>Патченый preloader — возврат из функции</td><td>Thumb2</td></tr>
-<tr><td><code>lk_a.bin</code></td><td>8 МБ (8388608 B)</td><td>LK (Little Kernel) загрузчик</td><td>ARM (инициализация), Thumb2 (основной)</td></tr>
-<tr><td><code>lk_a_patched.bin</code></td><td>8 МБ</td><td>Патченый LK — перезапись состояния режима загрузки</td><td>ARM/Thumb2</td></tr>
-<tr><td><code>out/seccfg.bin</code></td><td>8 МБ</td><td>Раздел конфигурации безопасности (первые 64 Б используются)</td><td>—</td></tr>
-<tr><td><code>out/gsort.bin</code></td><td>16 МБ</td><td>Раздел состояния верифицированной загрузки (86 Б не нулевые)</td><td>—</td></tr>
-<tr><td><code>out/efuse.bin</code></td><td>512 КБ</td><td>Дамп Efuse — ВСЕ 0xAA (не запрограммированы)</td><td>—</td></tr>
-<tr><td><code>out/otp.bin</code></td><td>—</td><td>Раздел OTP — ВСЕ 0x00</td><td>—</td></tr>
-<tr><td><code>out/sec1.bin</code></td><td>2 МБ</td><td>Состояние блокировки загрузчика — ВСЕ 0x00 (разблокирован)</td><td>—</td></tr>
-<tr><td><code>out/vbmeta_a.bin</code></td><td>—</td><td>Метаданные Android Verified Boot</td><td>—</td></tr>
-</tbody>
-</table>
-
-<hr>
-
-<h2 id="overview">Обзор цепочки загрузки</h2>
-
-<p>Стандартная 4-этапная цепочка загрузки Mediatek:</p>
-
-<div class="ascii">
-Power-on Reset
-  │
-  ▼
-ЭТАП 1: BROM (Boot ROM)
-  Файл: brom_MT6877_MT6877V_MT8791N_959.bin
-  Размер: 128 КБ  |  Расположение: ПЗУ SoC
-  Режим: ARM → Thumb
-  Роль: Инициализация железа, определение источника загрузки, загрузка + верификация preloader
-  │
-  ▼
-ЭТАП 2: Preloader
-  Файл: preloader_ruby.bin
-  Размер: 472756 B  |  Адрес загрузки: 0x100000
-  Режим: Thumb2
-  Роль: Инициализация DRAM (LPDDR4x), обнаружение разделов flash, загрузка LK/образов + RSA верификация
-  │
-  ▼
-ЭТАП 3: LK (Little Kernel)
-  Файл: lk_a.bin
-  Размер: 8 МБ  |  Адрес запуска: 0x48200000
-  Режим: ARM → Thumb2
-  Роль: Инициализация дисплея, выбор режима recovery/загрузки, загрузка Android boot image, переход в ядро
-  │
-  ▼
-ЭТАП 4: Linux Kernel (boot.img через LK)
-  Режим: AArch64 (ARM64)
-  Роль: Android OS
-</div>
-
-<hr>
-
-<h2 id="stage1">ЭТАП 1: BROM (Boot ROM)</h2>
-
-<h3>Вектор сброса и ранняя инициализация</h3>
-
-<p>При включении CPU ARM исполняет код по адресу 0x0 в режиме ARM. BROM отображается в память по адресу 0x0.</p>
-
-<p><strong>Вектор сброса (0x00):</strong> <code>B 0x54</code> — прыжок через таблицу векторов исключений.</p>
-
-<p><strong>Векторы исключений (0x04-0x3C):</strong> Все бесконечные циклы (undefined, SWI, prefetch abort, data abort — не используются в BROM).</p>
-
-<p><strong>Сохранение контекста (0x10-0x3C):</strong></p>
-<pre><code>0x10: LDR  r9, =0x00102B60    ; База области сохранения контекста
-0x14: STR  r0, [r9]           ; Сохранить причину загрузки
-0x18: STR  r1, [r9, #4]       ; Конфигурация загрузки
-0x2C: MRC  p15, 0, r0, c5, c0, {0}  ; Конфигурация региона MPU
-0x30: MRC  p15, 0, r1, c6, c0, {0}  ; База региона MPU
-0x3C: B    0xD9A8             ; Прыжок в основной init</code></pre>
-
-<p>Сохранённый контекст: r0 (выбор устройства загрузки: eMMC/UFS/SDMMC), r1–r4 (конфиг загрузки), LR, CP15 c5/c6 (конфиг региона MPU для окна устройства загрузки).</p>
-
-<h3>Основной init по адресу 0x54</h3>
-
-<pre><code>0x54: MOV  r0, #0             ; Обнуление рабочих регистров (r0–r12, SP, LR)
-0xB0: BL   0x11B54            ; early_hardware_init() — тактирование, PLL, сторожевой таймер
-0xE0: CPS  #0x13              ; Вход в режим SVC
-0xE4: MOV  SP, =0x00013084    ; Указатель стека SVC
-0xF0: BL   0x20C              ; secure_init() — включение защищённых функций
-0xF4: BL   0x11BB0            ; clock_init() — дерево системных тактов
-0xF8: BL   0x7B20             ; watchdog_disable()
-0xFC: BLX  0xDA70             ; Переход в режим Thumb → main_brom()</code></pre>
-
-<h3>Основной BROM (Thumb режим, 0xDA70+)</h3>
-
-<ol>
-<li><strong>Определение источника загрузки</strong> — чтение HW регистров eMMC/UFS/COMBO (строки: &quot;EMMC_BOOT&quot; @ 0x12B4, &quot;UFS_BOOT&quot;, &quot;COMBO_BOOT&quot;)</li>
-<li><strong>Инициализация контроллера памяти</strong></li>
-<li><strong>Проверка заголовка TIMESTMP</strong> — валидация разметки flash</li>
-<li><strong>Загрузка Preloader</strong> — поиск заголовка GFH (<code>MMM\x01</code> magic), парсинг GFH_FILE_INFO, копирование в SRAM по 0x100000, верификация подписи через встроенный открытый ключ</li>
-<li><strong>USB Download Mode</strong> — если нажата комбинация клавиш или загрузка не удалась:<br>
-&nbsp;&nbsp;- Режим &quot;USBDL&quot; (строки по 0x3FB0)<br>
-&nbsp;&nbsp;- Режимы ACM USB виртуального COM-порта: &quot;ACM COMMU&quot;, &quot;ACM DATA&quot;, &quot;ACM VIRTUALCOM&quot;<br>
-&nbsp;&nbsp;- Ожидание подписанного Download Agent (DA) через USB</li>
-<li><strong>Переход в preloader</strong> — очистка кэшей, BX на вход preloader по 0x10066C</li>
-</ol>
-
-<p><strong>BROM НЕ выполняет:</strong> инициализацию DRAM, разбор файловых систем, верификацию boot image.</p>
-
-<hr>
-
-<h2 id="stage2">ЭТАП 2: Preloader</h2>
-
-<h3>Загрузка и цепочка заголовков GFH</h3>
-
-<p>BROM загружает <code>preloader_ruby.bin</code> из загрузочного раздела через сырое чтение блоков. Файл начинается с заголовков GFH:</p>
-
-<table>
-<thead><tr><th>Смещение</th><th>Тип</th><th>Размер</th><th>Описание</th></tr></thead>
-<tbody>
-<tr><td>0x000</td><td>GFH_FILE_INFO (тип 0)</td><td>56 B</td><td>Дескриптор образа</td></tr>
-<tr><td>0x038</td><td>GFH_BL_INFO (тип 1)</td><td>12 B</td><td>Информация/версия загрузчика</td></tr>
-<tr><td>0x044</td><td>GFH_BL_SEC_KEY (тип 7)</td><td>100 B</td><td>Открытый ключ RSA (данные по 0x50)</td></tr>
-<tr><td>0x0A8</td><td>GFH_ATTEST (тип 2)</td><td>20 B</td><td>Данные аттестации</td></tr>
-<tr><td>0x0BC</td><td>GFH_BL_LOAD (тип 8)</td><td>48 B</td><td>Дескрипторы сегментов загрузки</td></tr>
-<tr><td>0x0EC</td><td>GFH_BL_ATTR (тип 18)</td><td>20 B</td><td>Атрибуты (флаги отладки?)</td></tr>
-</tbody>
-</table>
-
-<p><strong>Парсинг GFH_FILE_INFO:</strong></p>
-<pre><code>magic:       MMM\x01
-name:        FILE_INFO
-flash_type:  0x0F00          ; eMMC загрузочный раздел
-sig_len:     0x20 (32)       ; Длина хеша SHA-256
-load_addr:   0x100000
-entry:       0x66C           ; Вход = load_addr + 0x66C = 0x10066C</code></pre>
-
-<p><strong>GFH_BL_SEC_KEY</strong> содержит встроенный открытый ключ RSA для верификации подписи preloader. При неудачной верификации BROM переходит в режим USB загрузки.</p>
-
-<h3>Структура файла</h3>
-
-<pre><code>0x000-0x0FF:  Заголовки GFH
-0x100-0x26C:  Код запуска ARM
-0x300-0x340:  Область данных GFH
-0x100-0x57FFF: Код Thumb2
-0x58000-0x6F000: строки / rodata
-0x72000-0x73634: GOT (544 ссылок на строки через паттерн LDR+ADD на основе GOT)</code></pre>
-
-<h3>Точка входа (0x10066C)</h3>
-
-<ul>
-<li>Установка указателя стека (SRAM ~0x200000+)</li>
-<li>Инициализация PLL, контроллера DRAM, pinmux</li>
-<li>Переход в режим Thumb2</li>
-</ul>
-
-<h3>Инициализация DRAM</h3>
-
-<p>Основная задача: инициализация LPDDR4x через шину PMIC/SPI, калибровка таймингов, включение каналов.</p>
-
-<p>После инициализации DRAM:</p>
-<pre><code>0x100000-0x17B000  Код Preloader
-0x200000+          Стек/куча/BSS
-0x4000000+        Доступная DRAM</code></pre>
-
-<h3>Парсинг таблицы разделов</h3>
-
-<p>Чтение GPT с устройства загрузки (LBA 1 заголовок, LBA 2–33 записи). Ключевые разделы:</p>
-<pre><code>boot      → Linux kernel + ramdisk
-recovery  → Recovery kernel + ramdisk
-lk        → LK загрузчик
-vbmeta    → Метаданные верифицированной загрузки
-tee       → Trusted Execution Environment</code></pre>
-
-<h3>Загрузка образов и верификация</h3>
-
-<p><strong>Ключевые функции:</strong></p>
-<table>
-<thead><tr><th>Функция</th><th>Адрес</th><th>Роль</th></tr></thead>
-<tbody>
-<tr><td>preloader_main</td><td>0x343C0</td><td>Точка входа</td></tr>
-<tr><td>partition init</td><td>0x45CC0</td><td>Инициализация разделов</td></tr>
-<tr><td>partition loader</td><td>0xD750</td><td>Загрузка образов разделов (вызывает RSA verify по 0xD7E0)</td></tr>
-<tr><td>image loader</td><td>0x3E780</td><td>Основной загрузчик образов (вызывает 0x50CD4 @ 0x3E66C, 0x50F94 @ 0x3E848)</td></tr>
-<tr><td>SHA256</td><td>0x50B14</td><td>Вычисление хеша SHA-256</td></tr>
-<tr><td>RSA verify</td><td>0x51B98</td><td>Верификация подписи RSA-2048</td></tr>
-<tr><td>Hash compare</td><td>0x51D48</td><td>Сравнение хешей</td></tr>
-<tr><td>printf</td><td>0x43B94</td><td>Отладочный вывод</td></tr>
-<tr><td>assert/panic</td><td>0x3F754</td><td>Обработка ошибок</td></tr>
-<tr><td>malloc</td><td>0x47494</td><td>Выделение памяти</td></tr>
-<tr><td>memcpy/memset</td><td>0x47298, 0x472A8, 0x472BE</td><td>Операции с памятью</td></tr>
-</tbody>
-</table>
-
-<p><strong>Цепочка вызовов верификации:</strong></p>
-<pre><code>partition_loader (0xD750)
-  → image_loader (0x3E780)
-    → RSA_verify_main @ 0x50CD4 (RSA-2048 + SHA-256)
-    → image_auth_check @ 0x50F94 (SHA-256 + сравнение хеша)
-    → Дополнительные проверки для TEE (0x512B8-0x51400)
-    → Проверка хеша прошивки (0x51118-0x5128A)</code></pre>
-
-<p><strong>Поток RSA_verify_main @ 0x50CD4:</strong></p>
-<pre><code>push.w {r4-r7,sb,sl,fp,lr}; sub sp,#0x48
-  → BL 0x461E0 (инициализация крипто)
-  → BL 0x3294C, 0x461FA (загрузка/парсинг данных)
-  → BL 0x50B14 (хеш SHA-256)
-  → BL 0x5187C (криптооперация)
-  → BL 0x50A58, 0x50AC4 (шаги верификации)
-  → BL 0x51B98 (верификация подписи RSA)
-  → BL 0x51D48 (сравнение хеша)
-  → CMP R0,#0; IT NE; MOVNE R7,R3
-  → return r7 (=0 при успехе)</code></pre>
-
-<p>Ветки ошибок: 0x50E36, 0x50E9C, 0x50EAC, 0x50EEE, 0x50F04, 0x50F18 → 0x50F32.</p>
-
-<p><strong>Поток image_auth_check @ 0x50F94:</strong></p>
-<pre><code>push {r4-r7,lr}; sub sp,#0x2c
-  → BL 0x50B14 (SHA-256)
-  → BL 0x51D48 (сравнение хеша)
-  → CBNZ R0,0x50FD6 → "[%s] img auth fail(0x%x)"
-  → CBZ R0,0x50FE6 → "[%s] %s" "Verify Pass"
-  → return r4 (=0 при успехе)</code></pre>
-
-<h3>Переход в LK</h3>
-
-<p>После верификации: парсинг BR заголовка LK, копирование по 0x48200000, установка аргументов загрузки, очистка кэшей, переход на точку входа LK.</p>
-
-<hr>
-
-<h2 id="stage3">ЭТАП 3: LK (Little Kernel)</h2>
-
-<h3>Формат бинарника LK (заголовок BR Mediatek)</h3>
-
-<table>
-<thead><tr><th>Смещение</th><th>Размер</th><th>Поле</th><th>Значение</th><th>Описание</th></tr></thead>
-<tbody>
-<tr><td>0x000</td><td>4</td><td>magic1</td><td>0x58881688</td><td>Магия заголовка BR</td></tr>
-<tr><td>0x004</td><td>4</td><td>total_size</td><td>0x1BF668 (1.83 МБ)</td><td>Размер кода</td></tr>
-<tr><td>0x008</td><td>8</td><td>signature</td><td>&quot;lk\0\0\0\0\0\0&quot;</td><td>Идентификатор boot image</td></tr>
-<tr><td>0x030</td><td>4</td><td>magic2</td><td>0x58891689</td><td>Вторая магия</td></tr>
-<tr><td>0x034</td><td>4</td><td>load_address</td><td>0x200</td><td>Смещение в пункте назначения</td></tr>
-<tr><td>0x038</td><td>4</td><td>flags</td><td>0x1</td><td>BR_RAW (сырой бинарник)</td></tr>
-<tr><td>0x044</td><td>4</td><td>entry_point</td><td>0x10</td><td>Вход = load_addr + entry</td></tr>
-<tr><td>0x048-0x1FF</td><td>—</td><td>padding</td><td>0xFFFF</td><td>Промежуток до начала кода</td></tr>
-<tr><td>0x200+</td><td>—</td><td>ARM код</td><td>—</td><td>Исполняемый код начинается здесь</td></tr>
-</tbody>
-</table>
-
-<p>Загруженный вход: 0x48200000 + 0x10 = 0x48200010 → перемещён на 0x48200080.</p>
-
-<h3>Вход и саморелокация (0x200)</h3>
-
-<pre><code>; Обработчики исключений
-0x200: B    0x224           ; Вектор сброса
-0x204: B    0x25620         ; Неопределённая инструкция
-0x208: B    0x2563C         ; SWI
-0x20C: B    0x25658         ; Prefetch abort
-0x210: B    0x25674         ; Data abort
-0x214: B    0x25690         ; IRQ
-0x218: B    0x25694         ; FIQ
-0x21C: B    0x256F4         ; Зарезервировано
-
-; Реальный вход
-0x224: LDR  r6, =0x48200020 ; Хранилище источника загрузки
-       STR  r4, [r6]        ; Сохранить источник загрузки от preloader
-       MRC  p15, 0, r0, c1, c0, {0}  ; Чтение SCTLR
-       BIC  r0, r0, #0xB000 ; Очистка битов I-cache + MMU
-       BIC  r0, r0, #5      ; Очистка M (MMU) + C (D-cache)
-       ORR  r0, r0, #2      ; Установка A (проверка выравнивания)
-       MCR  p15, 0, r0, c1, c0, {0}  ; Запись SCTLR
-       ; Саморелокация при неверном адресе загрузки
-       ; Копирование 0x48200000-0x483BF668 → 0x48200000
-       BX   0x48200080      ; Переход на перемещённый код</code></pre>
-
-<h3>Настройка стека по 0x48200080</h3>
-
-<p>Все режимы разделяют область стека по 0x483C38EC (кроме IRQ):</p>
-
-<table>
-<thead><tr><th>Режим</th><th>Указатель стека</th></tr></thead>
-<tbody>
-<tr><td>IRQ (0x12)</td><td>0x483C38EC (отдельный)</td></tr>
-<tr><td>FIQ (0x11)</td><td>Использует SVC</td></tr>
-<tr><td>Abort (0x17)</td><td>Использует SVC</td></tr>
-<tr><td>Undefined (0x1B)</td><td>Использует SVC</td></tr>
-<tr><td>System (0x1F)</td><td>Использует SVC</td></tr>
-<tr><td>Supervisor (0x13)</td><td>Использует SVC</td></tr>
-</tbody>
-</table>
-
-<h3>Обнуление BSS → lk_main</h3>
-
-<pre><code>LDR  r0, =0x48338D60  ; Начало BSS
-LDR  r1, =0x48338D60  ; Конец BSS (начало = конец? возможно ошибка)
-LDR  r2, =0x483BF668  ; Реальный конец
-; Цикл обнуления BSS
-BLX  0x4827AEC        ; lk_main() — вход в C
-B    0x4820314        ; Бесконечный цикл</code></pre>
-
-<h3>LK Main (0x4827AEC) — C Runtime</h3>
-
-<ol>
-<li><strong>Инициализация архитектуры:</strong> MMU + таблицы страниц, включение D-cache, обслуживание TLB</li>
-<li><strong>Инициализация платформы (MT6877):</strong> UART консоль, дерево тактирования, GPIO/pinmux для дисплея/кнопок</li>
-<li><strong>Инициализация дисплея:</strong> Панель, подсветка, framebuffer (логотип загрузки)</li>
-<li><strong>Определение устройства загрузки:</strong> Чтение PMIC/регистров для причины загрузки:<br>
-&nbsp;&nbsp;- Обычная загрузка<br>
-&nbsp;&nbsp;- Recovery (громкость вверх + питание)<br>
-&nbsp;&nbsp;- Fastboot (громкость вниз + питание)<br>
-&nbsp;&nbsp;- Meta режим</li>
-<li><strong>Загрузка boot image:</strong> Поиск GPT → чтение заголовка Android boot image v3/v4 → загрузка kernel (Image.gz-dtb) + ramdisk в DRAM → передача DTB</li>
-<li><strong>Загрузка ядра:</strong> Настройка ATAGs/device tree → режим AArch64 → переход на точку входа ядра</li>
-</ol>
-
-<hr>
-
-<h2 id="memmap">Карта памяти</h2>
-
-<pre><code>Регион          Начало          Конец           Используется
-──────          ─────           ───             ──────────
-BROM (в SoC)   0x00000000      0x0001FFFF      Код BROM (128 КБ)
-SRAM стек      0x00013084      0x00013150      Стеки BROM (IRQ/SVC)
-SRAM контекст  0x00102B60      0x00102B80      Сохранение контекста BROM
-Preloader      0x00100000      0x001736B4      Preloader (загружен BROM)
-DRAM стек      0x20000000+                     Стеки/куча/BSS Preloader/LK
-LK код         0x48200000      0x483BF668      LK загрузчик
-DRAM куча      0x40000000+                     Доступная DRAM (до 12 ГБ)</code></pre>
-
-<hr>
-
-<h2 id="patches">Анализ патчей</h2>
-
-<h3>Preloader: Две стратегии патчинга</h3>
-
-<p><strong>Метод A — NOP в месте вызова (<code>preloader_ruby_patched.bin</code>):</strong> 12 байт, 3 места.</p>
-
-<table>
-<thead><tr><th>Расположение</th><th>Оригинал</th><th>Патч</th><th>Эффект</th></tr></thead>
-<tbody>
-<tr><td>0x3E66C</td><td><code>bl 0x50CD4</code> (RSA verify)</td><td><code>nop; nop</code></td><td>Удаляет вызов RSA verify из загрузчика образов</td></tr>
-<tr><td>0x3E68C</td><td><code>bl 0x522C0</code> (проверка)</td><td><code>nop; nop</code></td><td>Удаляет вызов проверки из загрузчика образов</td></tr>
-<tr><td>0x4618E</td><td><code>ubfx r0,r0,#1,#1</code> (тест бита)</td><td><code>movs r0,#0; nop</code></td><td>Инициализация разделов возвращает 0 (успех)</td></tr>
-</tbody>
-</table>
-
-<p><strong>Метод B — возврат из функции (<code>preloader_ruby_patched_local.bin</code>):</strong> 8 байт, 2 места.</p>
-
-<table>
-<thead><tr><th>Расположение</th><th>Оригинал</th><th>Патч</th><th>Эффект</th></tr></thead>
-<tbody>
-<tr><td>0x50CD4</td><td><code>2d e9 f0 4e</code> (push.w {r4-r7,sb,sl,fp,lr})</td><td><code>00 20 70 47</code> (movs r0,#0; bx lr)</td><td>RSA_verify_main сразу возвращает 0</td></tr>
-<tr><td>0x50F94</td><td><code>f0 b5 8b b0</code> (push {r4-r7,lr}; sub sp,#0x2c)</td><td><code>00 20 70 47</code> (movs r0,#0; bx lr)</td><td>image_auth_check сразу возвращает 0</td></tr>
-</tbody>
-</table>
-
-<p>Оба дают одинаковый результат: <strong>никакой верификации подписей загружаемых образов</strong>.</p>
-
-<p><strong>Связь:</strong> RE_CONTEXT.md описывает патчи по 0x50CD4/0x50F94 (соответствует patched_local), но ANALYSIS_PROGRESS.md маркирует &quot;patched&quot; файл с использованием других мест (0x3E66C/0x3E68C/0x4618E). Это предполагает:</p>
-<ul>
-<li><code>patched_local</code> — первая попытка (обход на уровне функций, более очевидный, меньше размер: 8 Б)</li>
-<li><code>patched</code> — улучшенная версия (обход на уровне вызовов, менее заметный: 12 Б)</li>
-</ul>
-
-<h3>Перезапись состояния режима загрузки LK (<code>lk_a_patched.bin</code>)</h3>
-
-<p>11 байт изменено по 0x273B4-0x27400:</p>
-
-<pre><code>; Оригинал (0x273B4):
-CMP  r4, #4
-IT   EQ
-STREQ.W  r4, [r8]           ; Запись 4 при r4==4
-BEQ  0x273EA
-...
-; По 0x27400:
-MOVS r3, #3
-STR.W r3, [r8]              ; Запись 3 в другом пути
-
-; Патч:
-MOVS r3, #0
-STR.W r3, [r8]              ; Всегда запись 0
-B    0x273EA
-...
-; По 0x27400:
-MOVS r3, #0
-STR.W r3, [r8]              ; Запись 0 вместо 3</code></pre>
-
-<p><strong>Эффект:</strong> Значения 4 и 3, записываемые в <code>[r8]</code>, заменены на 0. <code>[r8]</code> вероятно управляет блокировкой режима загрузки или состоянием верифицированной загрузки (green/orange/red). Нейтрализует блокировку/проверку безопасности при выборе режима загрузки.</p>
-
-<hr>
-
-<h2 id="vulns">Поверхность уязвимостей</h2>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 1</span> GCPU Blacklist Bypass (Аппаратный криптодвижок)</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> BROM — GCPU @ 0x10050000</span> <span class="severity-critical">CRITICAL</span></div>
-<p><strong>Тип:</strong> Обход ограничений аппаратной безопасности</p>
-<p>BROM реализует чёрный список памяти, предотвращающий чтение чувствительных регионов (BROM, SRAM preloader, регистры безопасности). Управляется через регистры GCPU. Регистры чёрного списка доступны для записи через тот же интерфейс AES-CBC, что используется для криптографии — разделение контроля доступа отсутствует.</p>
-<p><strong>Эксплойт:</strong> Запись 0 в регистры чёрного списка через настройку AES-CBC → полный R/W доступ к памяти.</p>
-<p><strong>Влияние:</strong> Полный дамп BROM, дамп preloader из SRAM, R/W ко ВСЕЙ памяти.</p>
-</div>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 2</span> Kamakiri — Переполнение USB Control Transfer</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> BROM — интерфейс USB CDC ACM</span> <span class="severity-critical">CRITICAL</span></div>
-<p><strong>Тип:</strong> Переполнение буфера USB control transfer + манипуляция регистрами</p>
-<p>Три варианта:</p>
-<ul>
-<li><strong>v1:</strong> Запись в scratch-регистр watchdog (0x10007050) → перезапись send_ptr → запуск SEND_CERT (команда 0xE0) → выполнение кода в контексте BROM</li>
-<li><strong>v2:</strong> USB CDC line coding ctrl_transfer — отсутствие проверки длины при копировании дескриптора → переполнение стекового буфера → перезапись соседних данных</li>
-<li><strong>v3 (KamakiriPL):</strong> Переполнение USB CDC line coding на уровне preloader → обход состояния аутентификации; также <code>bypass_2nd_da()</code> для обхода авторизации DA</li>
-</ul>
-<p><strong>Влияние:</strong> Произвольная нагрузка в контексте BROM, дамп preloader/BROM, обход авторизации загрузки 1-го этапа.</p>
-</div>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 3</span> HeapBait — Переполнение кучи в XML парсере (DA)</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> Download Agent — парсер XML команд</span> <span class="severity-critical">CRITICAL</span></div>
-<p><strong>Тип:</strong> Переполнение буфера кучи (несоответствие выделенного размера и размера чтения)</p>
-<p>При обработке DA команды <code>CMD:SECURITY</code> с <code>allinone_signature</code>:</p>
-<ol>
-<li>Парсинг атрибута XML <code>filename</code> → выделение буфера на основе ОБЪЯВЛЕННОГО размера имени файла</li>
-<li>Чтение данных файла из USB с использованием РАЗМЕРА ПАКЕТА (0x2000), а не выделенного размера</li>
-<li>Выделенный буфер: 0x1400 байт; данные за чанк: 0x2000 байт → переполнение: 0xC00 байт</li>
-</ol>
-<p><strong>Эксплойт:</strong> 3 этапа: загрузка shellcode как signature → запуск переполнения с filename из 5000 символов → повреждённый заголовок аллокатора вызывает перезапись колбэка DPC → выполнение shellcode с привилегиями DA → патч политик безопасности (hash binding, verify policy, download policy, SBC, SLA).</p>
-<p><strong>Значения самопроверки (ARM64 на MT6886+):</strong></p>
-<pre><code>shellcode_addr = 0x44C7F100, heap_base = 0x4007F100, dpc_addr = 0x40070028</code></pre>
-<p><strong>Проверка:</strong> DA пропатчен, если содержит &quot;Dest XML file name buffer overflow&quot;.</p>
-</div>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 4</span> Efuse/OTP не запрограммированы</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> Efuses @ 0x11F10000, раздел OTP</span> <span class="severity-critical">CRITICAL</span></div>
-<p><strong>Тип:</strong> Отсутствие постоянной конфигурации безопасности</p>
-<p><code>efuse.bin</code>: ВСЕ 0xAA (незапрограммированное состояние стирания). <code>otp.bin</code>: ВСЕ 0x00.</p>
-<p>Отсутствуют критические efuse: включение secure boot, отключение JTAG, хеш ключа OEM, конфигурация загрузки. Устройство не имеет <strong>аппаратного корня доверия</strong> — только программная безопасность.</p>
-<p><strong>Влияние:</strong> Любой программный обход является ПОСТОЯННЫМ. Невозможно заблокировать после загрузки. Все efuse R/W через GCPU (Уязв 1).</p>
-</div>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 5</span> Разделы безопасности перезаписываемы</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> Flash разделы seccfg, gsort, sec1, vbmeta_*</span> <span class="severity-high">HIGH</span></div>
-<p><strong>Тип:</strong> Программно реализованная безопасность на перезаписываемом носителе</p>
-<ul>
-<li><strong>seccfg:</strong> 64 Б используется из 8 МБ — магия &quot;MMMM&quot;, flags=0x01 (включено?), 32-байтный хеш/секрет. Весь раздел можно обнулить.</li>
-<li><strong>gsort:</strong> Минимальные данные с повторяющимися паттернами по 0x70/0x78 (счётчик отката?). Повсюду стёртые паттерны.</li>
-<li><strong>sec1:</strong> Полностью нулевой (2 МБ) — отсутствие состояния блокировки = загрузчик разблокирован.</li>
-<li><strong>vbmeta:</strong> Стандартный заголовок AVB — неактуален при патченом загрузчике.</li>
-</ul>
-</div>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 6</span> Preloader RSA Verify NOP (Подтверждено)</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> preloader_ruby.bin @ 0x50CD4, 0x50F94, 0x3E66C, 0x3E68C</span> <span class="severity-high">HIGH</span></div>
-<p><strong>Тип:</strong> Обход верификации подписи RSA (два метода)</p>
-<p>Оба метода подтверждены рабочими: патч возврата из функции (return 0) и NOP в месте вызова (пропуск вызова). См. раздел Анализа патчей для подробностей на уровне байт.</p>
-</div>
-
-<div class="vuln">
-<h4><span class="section-tag">УЯЗВ 7</span> Перезапись состояния режима загрузки LK</h4>
-<div class="vuln-label"><span><strong>Расположение:</strong> lk_a.bin @ 0x273B4, 0x27400</span> <span class="severity-medium">MEDIUM</span></div>
-<p><strong>Тип:</strong> Перезапись регистра состояния безопасности</p>
-<p>Значения 4 и 3, записываемые в <code>[r8]</code>, заменены на 0 — нейтрализует заблокированные/принудительные состояния загрузки. См. раздел Анализа патчей для подробностей.</p>
-</div>
-
-<hr>
-
-<h2 id="security">Архитектура безопасности</h2>
-
-<ol>
-<li><strong>BROM → Preloader:</strong> Проверка подписи RSA-2048 + SHA-256 через ключ в GFH_BL_SEC_KEY. Провал → USB download mode (требуется аутентифицированный DA).</li>
-<li><strong>Preloader → LK/boot:</strong> Аналогично RSA-2048 + SHA-256. Каждый образ (lk, boot, recovery, tee) верифицируется индивидуально.</li>
-<li><strong>LK → Kernel:</strong> Android Verified Boot (AVB) — дерево хешей vbmeta + счётчик отката. LK передаёт device tree с состоянием верифицированной загрузки.</li>
-<li><strong>Состояние блокировки:</strong> Preloader проверяет состояние блокировки загрузчика (раздел sec1). Заблокировано = только подписанные образы. Разблокировано = экран предупреждения + любые образы загружаются.</li>
-<li><strong>Авторизация SLA/DAA:</strong> Режим загрузки требует SLA (вызов-ответ с ключом OEM) + DAA (подписанный бинарник DA).</li>
-</ol>
-
-<h3>Влияние патчей на безопасность</h3>
-
-<table>
-<thead><tr><th>Патч</th><th>Что обходит</th><th>Влияние</th></tr></thead>
-<tbody>
-<tr><td>preloader 0x50CD4 (или 0x3E66C)</td><td>Верификация подписи RSA</td><td>Загрузка любых неподписанных LK/boot</td></tr>
-<tr><td>preloader 0x50F94 (или 0x3E68C)</td><td>Проверка хеша аутентичности</td><td>Второй уровень верификации</td></tr>
-<tr><td>preloader 0x4618E</td><td>Флаг инициализации разделов</td><td>Принудительный успех</td></tr>
-<tr><td>LK 0x273B4/0x27400</td><td>Проверка блокировки режима загрузки</td><td>Отключает принудительную безопасную загрузку</td></tr>
-</tbody>
-</table>
-
-<hr>
-
-<h2 id="attacksurf">Сводка поверхности атаки</h2>
-
-<table>
-<thead><tr><th>#</th><th>Уязвимость</th><th>Этап</th><th>Требуемый доступ</th><th>Сложность</th><th>Влияние</th></tr></thead>
-<tbody>
-<tr><td>1</td><td>GCPU Blacklist Bypass</td><td>BROM</td><td>USB + DA</td><td>Средняя</td><td>Полный R/W памяти</td></tr>
-<tr><td>2</td><td>Kamakiri USB Overflow</td><td>BROM</td><td>USB</td><td>Низкая</td><td>Произвольный код в BROM</td></tr>
-<tr><td>3</td><td>HeapBait XML Overflow</td><td>DA</td><td>USB + подписанный DA</td><td>Высокая</td><td>Полный R/W flash</td></tr>
-<tr><td>4</td><td>Efuse/OTP не запрограммированы</td><td>Аппаратура</td><td>Любой доступ</td><td>Нет</td><td>Нет постоянной безопасности</td></tr>
-<tr><td>5</td><td>Secpart перезаписываемы</td><td>Загрузчик</td><td>Доступ DA</td><td>Низкая</td><td>Откат состояния безопасности</td></tr>
-<tr><td>6</td><td>RSA Verify NOP</td><td>Preloader</td><td>Модификация preloader</td><td>Низкая</td><td>Загрузка неподписанных образов</td></tr>
-<tr><td>7</td><td>LK State Overwrite</td><td>LK</td><td>Модификация LK</td><td>Низкая</td><td>Отключение принудительного режима загрузки</td></tr>
-</tbody>
-</table>
-
-<h2 id="attackpath">Рекомендуемый вектор атаки (наименьшее сопротивление)</h2>
-
-<pre><code>1. USB подключение к устройству в режиме BROM (громкость вверх + питание)
-2. Kamakiri (Уязв 2) → выполнение кода в BROM → дамп BROM, проверка адресов чёрного списка
-3. GCPU bypass (Уязв 1) → отключение чёрного списка → полный доступ к памяти
-4. Дамп preloader из SRAM (0x200000-0x240000)
-5. Применение патчей preloader (Уязв 6): NOP для вызовов RSA
-6. Запись патченого preloader в загрузочный раздел
-7. Устройство загружает ЛЮБОЙ неподписанный boot image</code></pre>
-
-<p><strong>Если существует payload HeapBait для MT6877:</strong></p>
-<pre><code>1. Отправка подписанного DA → загрузка HeapBait → XML переполнение (Уязв 3)
-2. Патч политик безопасности DA: hash binding, verify policy, download policy → все return 0
-3. Прямая запись flash → замена LK, boot, recovery неподписанными версиями</code></pre>
-
-<hr>
-
-<h2 id="coldstorage">Примечание: Cold Storage</h2>
-
-<p>Состояние Efuse (все 0xAA) — самый критический вывод:</p>
-<ul>
-<li>Устройство <strong>никогда</strong> не имело включённой аппаратной безопасной загрузки</li>
-<li>Полное программное восстановление до стока <strong>не может</strong> её включить</li>
-<li>OEM поставил устройство с постоянно разблокируемым загрузчиком</li>
-<li>Любой использованный эксплойт переживёт будущие обновления ПО</li>
-<li>OTA обновления перезаписывают flash с заблокированным состоянием, но efuse не пережжёны → программные блокировки снова обходятся через те же эксплойты</li>
-</ul>
-
-<hr>
-
-<h2 id="downloads">Загрузки</h2>
-
-<div class="download-grid">
-
-<div class="download-card">
-<div class="fn">brom_MT6877_MT6877V_MT8791N_959.bin</div>
-<div class="sz">128 КБ</div>
-<div class="desc">Дамп BROM (Boot ROM) — ARM/Thumb, кремниевое ПЗУ</div>
-<a class="download-btn" href="../brom_MT6877_MT6877V_MT8791N_959.bin" download>Скачать</a>
-</div>
-
-<div class="download-card">
-<div class="fn">preloader_ruby.bin</div>
-<div class="sz">472756 B</div>
-<div class="desc">Preloader — загрузчик 2-го этапа, Thumb2, оригинал</div>
-<a class="download-btn" href="../preloader_ruby.bin" download>Скачать</a>
-</div>
-
-<div class="download-card">
-<div class="fn">preloader_ruby_patched.bin</div>
-<div class="sz">472756 B</div>
-<div class="desc">Патченый preloader — NOP в местах вызова (12 Б, 3 места)</div>
-<a class="download-btn" href="../preloader_ruby_patched.bin" download>Скачать</a>
-</div>
-
-<div class="download-card">
-<div class="fn">preloader_ruby_patched_local.bin</div>
-<div class="sz">472756 B</div>
-<div class="desc">Патченый preloader — возврат из функции (8 Б, 2 места)</div>
-<a class="download-btn" href="../preloader_ruby_patched_local.bin" download>Скачать</a>
-</div>
-
-<div class="download-card">
-<div class="fn">lk_a.bin</div>
-<div class="sz">8 МБ</div>
-<div class="desc">LK загрузчик — оригинал, заголовок BR MTK + ARM/Thumb2</div>
-<a class="download-btn" href="../lk_a.bin" download>Скачать</a>
-</div>
-
-<div class="download-card">
-<div class="fn">lk_a_patched.bin</div>
-<div class="sz">8 МБ</div>
-<div class="desc">LK загрузчик — патченый (перезапись состояния режима загрузки)</div>
-<a class="download-btn" href="../lk_a_patched.bin" download>Скачать</a>
-</div>
-
-</div>
-
-</div>
-</div>
-
-<script>
-(function() {
-  var toggle = document.getElementById('sidebarToggle');
-  var sidebar = document.getElementById('sidebar');
-  var overlay = document.getElementById('sidebarOverlay');
-
-  function openSidebar() {
-    sidebar.classList.add('open');
-    overlay.classList.add('open');
-  }
-  function closeSidebar() {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('open');
-  }
-  window.closeSidebar = closeSidebar;
-
-  toggle.addEventListener('click', function() {
-    if (sidebar.classList.contains('open')) { closeSidebar(); }
-    else { openSidebar(); }
-  });
-  overlay.addEventListener('click', closeSidebar);
-
-  var links = sidebar.querySelectorAll('a');
-  var sections = [];
-  links.forEach(function(link) {
-    var href = link.getAttribute('href');
-    if (href && href.startsWith('#')) {
-      sections.push(href.substring(1));
-    }
-  });
-
-  function updateActive() {
-    var scrollY = window.scrollY + 100;
-    var activeId = 'top';
-    sections.forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el && el.offsetTop <= scrollY) {
-        activeId = id;
-      }
-    });
-    links.forEach(function(link) {
-      var href = link.getAttribute('href');
-      link.classList.remove('active');
-      if (href === '#' + activeId) {
-        link.classList.add('active');
-      }
-    });
-  }
-
-  window.addEventListener('scroll', updateActive);
-  updateActive();
-})();
-</script>
-
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Переключить навигацию">☰</button>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-title">Разделы</div>
+    <a href="#top" onclick="closeSidebar()">Наверх</a>
+    <a href="#xiaomi-redmi-note-12-pro-5g-ruby--consolidated-boo" onclick="closeSidebar()">Xiaomi Redmi Note 12 Pro 5G
+      (ruby) — Сводный анализ цепочки загрузки и безопасности</a>
+    <a href="#1-file-inventory" onclick="closeSidebar()">1. Список файлов</a>
+    <a href="#2-boot-chain-overview" onclick="closeSidebar()">2. Обзор цепочки загрузки</a>
+    <a href="#3-stage-1-brom" onclick="closeSidebar()">3. ЭТАП 1: BROM</a>
+    <a href="#reset-vector--early-init" style="padding-left:28px" onclick="closeSidebar()">Вектор сброса и ранняя
+      инициализация</a>
+    <a href="#main-brom-thumb-0xda70" style="padding-left:28px" onclick="closeSidebar()">Основной BROM (Thumb, 0xDA70+)</a>
+    <a href="#brom-memory-layout-during-execution" style="padding-left:28px" onclick="closeSidebar()">Карта памяти BROM
+      (во время выполнения)</a>
+    <a href="#4-stage-2-preloader" onclick="closeSidebar()">4. ЭТАП 2: Preloader</a>
+    <a href="#gfh-header-chain-0x000-0x0ff" style="padding-left:28px" onclick="closeSidebar()">Цепочка заголовков GFH
+      (0x000-0x0FF)</a>
+    <a href="#preloader-mmm-section-types" style="padding-left:28px" onclick="closeSidebar()">Типы секций MMM Preloader</a>
+    <a href="#file-layout" style="padding-left:28px" onclick="closeSidebar()">Структура файла</a>
+    <a href="#execution" style="padding-left:28px" onclick="closeSidebar()">Выполнение</a>
+    <a href="#key-functions" style="padding-left:28px" onclick="closeSidebar()">Ключевые функции</a>
+    <a href="#jump-to-lk" style="padding-left:28px" onclick="closeSidebar()">Переход к LK</a>
+    <a href="#5-stage-3-lk-little-kernel" onclick="closeSidebar()">5. ЭТАП 3: LK (Little Kernel)</a>
+    <a href="#binary-format-mediatek-br-header" style="padding-left:28px" onclick="closeSidebar()">Формат бинарного файла
+      (заголовок BR Mediatek)</a>
+    <a href="#entry--self-relocation" style="padding-left:28px" onclick="closeSidebar()">Точка входа и саморелокация</a>
+    <a href="#stack-setup--0x48200080" style="padding-left:28px" onclick="closeSidebar()">Настройка стека @ 0x48200080</a>
+    <a href="#bss-zeroing" style="padding-left:28px" onclick="closeSidebar()">Обнуление BSS</a>
+    <a href="#lk_main-0x4827aec" style="padding-left:28px" onclick="closeSidebar()">lk_main (0x4827AEC)</a>
+    <a href="#code-architecture" style="padding-left:28px" onclick="closeSidebar()">Архитектура кода</a>
+    <a href="#isa-mode-split" style="padding-left:28px" onclick="closeSidebar()">Разделение по режимам ISA</a>
+    <a href="#string-reference-pattern-ldradd" style="padding-left:28px" onclick="closeSidebar()">Паттерн ссылок на строки (LDR+ADD)</a>
+    <a href="#6-lk-fastboot" onclick="closeSidebar()">6. LK Fastboot</a>
+    <a href="#command-dispatch" style="padding-left:28px" onclick="closeSidebar()">Диспетчеризация команд</a>
+    <a href="#data-structures" style="padding-left:28px" onclick="closeSidebar()">Структуры данных</a>
+    <a href="#standard-commands" style="padding-left:28px" onclick="closeSidebar()">Стандартные команды</a>
+    <a href="#getvar-variables" style="padding-left:28px" onclick="closeSidebar()">Переменные getvar</a>
+    <a href="#oem-commands-all-mapped-at-0xab000-0xab600" style="padding-left:28px" onclick="closeSidebar()">OEM
+      команды (все отображены в 0xAB000-0xAB600)</a>
+    <a href="#command-table-string-offsets" style="padding-left:28px" onclick="closeSidebar()">Смещения строк таблицы команд</a>
+    <a href="#lock-state-dependent-behavior" style="padding-left:28px" onclick="closeSidebar()">Поведение в зависимости от состояния блокировки</a>
+    <a href="#7-seccfg--security-configuration-storage" onclick="closeSidebar()">7. SECCFG — Хранилище конфигурации безопасности</a>
+    <a href="#structure" style="padding-left:28px" onclick="closeSidebar()">Структура</a>
+    <a href="#functions" style="padding-left:28px" onclick="closeSidebar()">Функции</a>
+    <a href="#deduced-lock-state-to-avb-mapping" style="padding-left:28px" onclick="closeSidebar()">Выведенное отображение состояния блокировки на AVB</a>
+    <a href="#8-avb-20--verified-boot" onclick="closeSidebar()">8. AVB 2.0 и Verified Boot</a>
+    <a href="#components" style="padding-left:28px" onclick="closeSidebar()">Компоненты</a>
+    <a href="#boot-states" style="padding-left:28px" onclick="closeSidebar()">Состояния загрузки</a>
+    <a href="#read_is_device_unlocked-callback" style="padding-left:28px"
+      onclick="closeSidebar()">Коллбэк `read_is_device_unlocked`</a>
+    <a href="#calling-chain-avb_slot_verify" style="padding-left:28px" onclick="closeSidebar()">Цепочка вызовов (avb_slot_verify)</a>
+    <a href="#initialize_persistent_digest-0x67308" style="padding-left:28px"
+      onclick="closeSidebar()">`initialize_persistent_digest` (0x67308)</a>
+    <a href="#avbops-struct-location" style="padding-left:28px" onclick="closeSidebar()">Расположение структуры AvbOps</a>
+    <a href="#twin-candidate-at-0x7a02c" style="padding-left:28px" onclick="closeSidebar()">Двойник-кандидат в 0x7a02c</a>
+    <a href="#seccfg_parse-0x1a44c" style="padding-left:28px" onclick="closeSidebar()">`seccfg_parse` (0x1a44c)</a>
+    <a href="#seccfg_get_value-0x1a388" style="padding-left:28px" onclick="closeSidebar()">`seccfg_get_value` (0x1a388)</a>
+    <a href="#related-avb-strings-not-yet-referenced" style="padding-left:28px" onclick="closeSidebar()">Связанные строки AVB, ещё не найденные в коде</a>
+    <a href="#key-uncertainties-avb" style="padding-left:28px" onclick="closeSidebar()">Ключевые неопределённости (AVB)</a>
+    <a href="#next-steps-avb" style="padding-left:28px" onclick="closeSidebar()">Следующие шаги (AVB)</a>
+    <a href="#dead-code-avb20-lock_state--0xx-at-0x12f22c" style="padding-left:28px" onclick="closeSidebar()">Мёртвый код:
+      `[AVB20] lock_state = 0x%x` по адресу 0x12F22C</a>
+    <a href="#9-micustom-layer--xiaomi-unlock-logic" onclick="closeSidebar()">9. Слой MiCustom — Логика разблокировки Xiaomi</a>
+    <a href="#api-surface" style="padding-left:28px" onclick="closeSidebar()">Поверхность API</a>
+    <a href="#rsa-public-key--file-0xa85c0" style="padding-left:28px" onclick="closeSidebar()">Открытый ключ RSA (@ файл 0xa85c0)</a>
+    <a href="#token-structure" style="padding-left:28px" onclick="closeSidebar()">Структура токена</a>
+    <a href="#unlock-flow-9-phases" style="padding-left:28px" onclick="closeSidebar()">Процесс разблокировки (9 фаз)</a>
+    <a href="#key-file-locations-summary" style="padding-left:28px" onclick="closeSidebar()">Сводка расположения ключевых файлов</a>
+    <a href="#set_lock_state-0x27334--state-transition-table" style="padding-left:28px"
+      onclick="closeSidebar()">`set_lock_state` (0x27334) — Таблица переходов состояний</a>
+    <a href="#10-atf-trustzone-interaction" onclick="closeSidebar()">10. Взаимодействие с ATF TrustZone</a>
+    <a href="#key-smc-locations" style="padding-left:28px" onclick="closeSidebar()">Ключевые расположения SMC</a>
+    <a href="#11-rpmb" onclick="closeSidebar()">11. RPMB</a>
+    <a href="#12-cryptography" onclick="closeSidebar()">12. Криптография</a>
+    <a href="#rsa" style="padding-left:28px" onclick="closeSidebar()">RSA</a>
+    <a href="#sha-256" style="padding-left:28px" onclick="closeSidebar()">SHA-256</a>
+    <a href="#hmac" style="padding-left:28px" onclick="closeSidebar()">HMAC</a>
+    <a href="#13-preloader-verification-bypass--two-strategies" onclick="closeSidebar()">13. Preloader Verification
+      Bypass — Two Strategies</a>
+    <a href="#method-a-call-site-nop-preloader_ruby_patchedbin" style="padding-left:28px"
+      onclick="closeSidebar()">Метод A: NOP в месте вызова (`preloader_ruby_patched.bin`)</a>
+    <a href="#method-b-function-return-preloader_ruby_patched_lo" style="padding-left:28px"
+      onclick="closeSidebar()">Метод B: Возврат из функции (`preloader_ruby_patched_local.bin`)</a>
+    <a href="#rsa_verify_main-0x50cd4--sub-call-chain" style="padding-left:28px"
+      onclick="closeSidebar()">RSA_verify_main (0x50CD4) — Цепочка подвызовов</a>
+    <a href="#image_auth_check-0x50f94--sub-call-chain" style="padding-left:28px"
+      onclick="closeSidebar()">image_auth_check (0x50F94) — Цепочка подвызовов</a>
+    <a href="#additional-verification-functions" style="padding-left:28px" onclick="closeSidebar()">Дополнительные функции верификации</a>
+    <a href="#lk-patch-lk_a_patchedbin" style="padding-left:28px" onclick="closeSidebar()">Патч LK (`lk_a_patched.bin`)</a>
+    <a href="#self-integrity-checks-in-lk" style="padding-left:28px" onclick="closeSidebar()">Проверки целостности в LK</a>
+    <a href="#attack-surface-bypass-difficulty-lk-level" style="padding-left:28px" onclick="closeSidebar()">Сложность обхода поверхности атаки (уровень LK)</a>
+    <a href="#next-steps-patch-investigation" style="padding-left:28px" onclick="closeSidebar()">Следующие шаги (исследование патчей)</a>
+    <a href="#preloader-style-security-duplicated-in-lk" style="padding-left:28px"
+      onclick="closeSidebar()">Безопасность в стиле Preloader, продублированная в LK</a>
+    <a href="#14-vulnerability-surface" onclick="closeSidebar()">14. Поверхность уязвимостей</a>
+    <a href="#vuln-1-gcpu-blacklist-bypass-critical" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 1: Обход чёрного списка GCPU (КРИТИЧЕСКИ)</a>
+    <a href="#vuln-2-kamakiri-usb-overflow-critical" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 2: Kamakiri USB переполнение (КРИТИЧЕСКИ)</a>
+    <a href="#vuln-3-heapbait-xml-overflow-critical" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 3: HeapBait XML переполнение (КРИТИЧЕСКИ)</a>
+    <a href="#vuln-4-efuseotp-unprogrammed-critical" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 4: Efuse/OTP не запрограммированы (КРИТИЧЕСКИ)</a>
+    <a href="#vuln-5-security-partitions-rewritable-high" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 5: Разделы безопасности перезаписываемы (ВЫСОКИЙ)</a>
+    <a href="#vuln-6-preloader-rsa-verify-nop-high" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 6: Preloader RSA Verify NOP (ВЫСОКИЙ)</a>
+    <a href="#vuln-7-lk-boot-mode-state-overwrite-medium" style="padding-left:28px" onclick="closeSidebar()">УЯЗВ 7: LK перезапись состояния режима загрузки (СРЕДНИЙ)</a>
+    <a href="#attack-surface-summary" style="padding-left:28px" onclick="closeSidebar()">Сводка поверхности атаки</a>
+    <a href="#recommended-attack-path" style="padding-left:28px" onclick="closeSidebar()">Рекомендуемый путь атаки</a>
+    <a href="#cold-storage-note" style="padding-left:28px" onclick="closeSidebar()">Примечание о холодном хранении</a>
+    <a href="#vuln-detail-gsort-hex-structure" style="padding-left:28px" onclick="closeSidebar()">Детали уязвимости: шестнадцатеричная структура gsort</a>
+    <a href="#vuln-detail-seccfg-hex-structure" style="padding-left:28px" onclick="closeSidebar()">Детали уязвимости: шестнадцатеричная структура seccfg</a>
+    <a href="#vuln-detail-sec1-partition" style="padding-left:28px" onclick="closeSidebar()">Детали уязвимости: раздел sec1</a>
+    <a href="#vuln-detail-heapbait-vulnerability-check" style="padding-left:28px" onclick="closeSidebar()">Детали уязвимости: проверка HeapBait</a>
+    <a href="#15-firmware-dump-details" onclick="closeSidebar()">15. Детали дампа прошивки</a>
+    <a href="#gpt-partition-table" style="padding-left:28px" onclick="closeSidebar()">Таблица разделов GPT</a>
+    <a href="#notable-empty-partitions" style="padding-left:28px" onclick="closeSidebar()">Примечательные пустые разделы</a>
+    <a href="#vbmeta--algorithm--none-critical" style="padding-left:28px" onclick="closeSidebar()">vbmeta — Алгоритм = NONE (Критично)</a>
+    <a href="#tee-tee_abin" style="padding-left:28px" onclick="closeSidebar()">TEE (tee_a.bin)</a>
+    <a href="#co-processor-firmware-all-0x88168858-wrapper-forma" style="padding-left:28px"
+      onclick="closeSidebar()">Прошивки сопроцессоров (все в формате обёртки 0x88168858)</a>
+    <a href="#lk-boot-mode-strings-from-binary" style="padding-left:28px" onclick="closeSidebar()">Строки режимов загрузки LK (из бинарника)</a>
+    <a href="#lk-verified-boot--security-strings" style="padding-left:28px" onclick="closeSidebar()">Строки верифицированной загрузки и безопасности LK</a>
+    <a href="#additional-vulnerability-assessment-notes" style="padding-left:28px" onclick="closeSidebar()">Дополнительные заметки по оценке уязвимостей</a>
+    <a href="#preloader-build-paths-from-strings" style="padding-left:28px" onclick="closeSidebar()">Preloader Сборка
+      Paths (from strings)</a>
+    <a href="#preloader-key-strings" style="padding-left:28px" onclick="closeSidebar()">Ключевые строки Preloader</a>
+    <a href="#filesystem-images" style="padding-left:28px" onclick="closeSidebar()">Образы файловых систем</a>
+    <a href="#boot-image-boot_abin" style="padding-left:28px" onclick="closeSidebar()">Загрузочный образ (boot_a.bin)</a>
+    <a href="#boot-arguments" style="padding-left:28px" onclick="closeSidebar()">Аргументы загрузки</a>
+    <a href="#16-preloader-c-port-project" onclick="closeSidebar()">16. Проект портирования Preloader на C</a>
+    <a href="#structure" style="padding-left:28px" onclick="closeSidebar()">Структура</a>
+    <a href="#memory-layout-preloader_c" style="padding-left:28px" onclick="closeSidebar()">Карта памяти (preloader_c)</a>
+    <a href="#build" style="padding-left:28px" onclick="closeSidebar()">Сборка</a>
+    <a href="#status" style="padding-left:28px" onclick="closeSidebar()">Статус</a>
+    <a href="#dependencies" style="padding-left:28px" onclick="closeSidebar()">Зависимости</a>
+    <a href="#17-memory-map" onclick="closeSidebar()">17. Карта памяти</a>
+    <a href="#18-source-files-index-all-preserved" onclick="closeSidebar()">18. Индекс исходных файлов (все сохранены)</a>
+  </nav>
+
+  <div class="main" id="top">
+    <div class="container">
+
+      <h1>Xiaomi Redmi Note 12 Pro 5G (ruby) — Consolidated Цепочка загрузки & Security Analysis</h1>
+
+      <div class="meta">
+        <span>SoC: MediaTek Dimensity 1080 (MT6877) / MT8791N</span><br>
+        <span>Загрузчик: Little Kernel (LK), ARMv7-A Thumb2</span>
+        <span>Бинарный файл: <code>out/lk_a.bin</code>, 8 388 608 байт, ссылка <code>0x48200000</code></span><br>
+        <span>Android: 12.0.0.418, buildvariant=user</span>
+        <span>TEE: ATF BL31 + MicroTrust TEEI (проприетарный)</span><br>
+        <span>Источники объединены из 12 markdown-файлов (10–14 июня 2026)</span>
+      </div>
+
+      <hr>
+
+      <h1 id="xiaomi-redmi-note-12-pro-5g-ruby--consolidated-boo">Xiaomi Redmi Note 12 Pro 5G (ruby) — Сводный анализ цепочки загрузки и безопасности</h1>
+      <p><strong>SoC:</strong> MediaTek Dimensity 1080 (MT6877) / MT8791N</p>
+      <p><strong>Загрузчик:</strong> Little Kernel (LK), ARMv7-A Thumb2</p>
+      <p><strong>Бинарный файл:</strong> <code>out/lk_a.bin</code>, 8,388,608 bytes, link <code>0x48200000</code></p>
+      <p><strong>Android:</strong> 12.0.0.418, buildvariant=user</p>
+      <p><strong>TEE:</strong> ATF BL31 + MicroTrust TEEI (proprietary)</p>
+      <p><strong>Sources consolidated from 12 markdown files (Jun 10–Jun 14 2026)</strong></p>
+      <hr>
+      <h2 id="1-file-inventory">1. Список файлов</h2>
+      <p>Полный дамп из 80 файлов из каталога <code>out/</code>. 77 файлов дампов разделов + 3 варианта патчей.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Файл</th>
+            <th>Размер</th>
+            <th>Тип</th>
+            <th>Примечания</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>brom_MT6877_MT6877V_MT8791N_959.bin</code></td>
+            <td>128 KB</td>
+            <td>ARM BROM</td>
+            <td>Дамп Boot ROM</td>
+          </tr>
+          <tr>
+            <td><code>preloader_ruby.bin</code></td>
+            <td>472 KB</td>
+            <td>MMM preloader</td>
+            <td>Загрузчик 2-го этапа</td>
+          </tr>
+          <tr>
+            <td><code>preloader_ruby_patched.bin</code></td>
+            <td>472 KB</td>
+            <td>Модифицированный preloader</td>
+            <td>call-site NOP (12 B)</td>
+          </tr>
+          <tr>
+            <td><code>preloader_ruby_patched_local.bin</code></td>
+            <td>472 KB</td>
+            <td>Модифицированный preloader</td>
+            <td>function-return (8 B)</td>
+          </tr>
+          <tr>
+            <td><code>out/lk_a.bin</code></td>
+            <td>8 MB</td>
+            <td>LK bootloader</td>
+            <td>Little Kernel</td>
+          </tr>
+          <tr>
+            <td><code>out/lk_a_patched.bin</code></td>
+            <td>8 MB</td>
+            <td>Модифицированный LK</td>
+            <td>state overwrite (11 B)</td>
+          </tr>
+          <tr>
+            <td><code>out/boot_a.bin</code></td>
+            <td>128 MB</td>
+            <td>Android bootimg v2</td>
+            <td>kernel 16.3 MB + ramdisk 17.9 MB</td>
+          </tr>
+          <tr>
+            <td><code>out/boot_b.bin</code></td>
+            <td>128 MB</td>
+            <td>ALL ZEROS</td>
+            <td>Слот B не используется</td>
+          </tr>
+          <tr>
+            <td><code>out/vbmeta_a.bin</code></td>
+            <td>8 MB</td>
+            <td>AVB v1.0</td>
+            <td>Algorithm=NONE</td>
+          </tr>
+          <tr>
+            <td><code>out/vbmeta_b.bin</code></td>
+            <td>8 MB</td>
+            <td>AVB</td>
+            <td>Идентичен A</td>
+          </tr>
+          <tr>
+            <td><code>out/vbmeta_system_a/b.bin</code></td>
+            <td>8 MB each</td>
+            <td>AVB</td>
+            <td>Algorithm=NONE</td>
+          </tr>
+          <tr>
+            <td><code>out/vbmeta_vendor_a/b.bin</code></td>
+            <td>8 MB each</td>
+            <td>AVB</td>
+            <td>Algorithm=NONE</td>
+          </tr>
+          <tr>
+            <td><code>out/tee_a.bin</code></td>
+            <td>5 MB</td>
+            <td>ATF BL31+TEEI</td>
+            <td>MicroTrust TEEI</td>
+          </tr>
+          <tr>
+            <td><code>out/seccfg.bin</code></td>
+            <td>8 MB</td>
+            <td>MMMM format</td>
+            <td>64 B used, rest zeros</td>
+          </tr>
+          <tr>
+            <td><code>out/efuse.bin</code></td>
+            <td>512 KB</td>
+            <td>0xAA pattern</td>
+            <td>ALL unprogrammed</td>
+          </tr>
+          <tr>
+            <td><code>out/otp.bin</code></td>
+            <td>48 MB</td>
+            <td>ВСЕ 0x00</td>
+            <td>ВСЕ не пережжены</td>
+          </tr>
+          <tr>
+            <td><code>out/sec1.bin</code></td>
+            <td>2 MB</td>
+            <td>ВСЕ 0x00</td>
+            <td>Разблокировано</td>
+          </tr>
+          <tr>
+            <td><code>out/gsort.bin</code></td>
+            <td>16 MB</td>
+            <td>Формат GSORT</td>
+            <td>86 B non-zero</td>
+          </tr>
+          <tr>
+            <td><code>out/pi_img_a.bin</code></td>
+            <td>1 MB</td>
+            <td>X.509 сертификаты</td>
+            <td>Хранилище сертификатов MediaTek</td>
+          </tr>
+          <tr>
+            <td><code>gpt.bin</code></td>
+            <td>132 KB</td>
+            <td>GPT защитный MBR</td>
+            <td>Partition table</td>
+          </tr>
+          <tr>
+            <td><code>out/cust.bin</code></td>
+            <td>2 GB</td>
+            <td>EROFS</td>
+            <td>Файловая система Android cust</td>
+          </tr>
+          <tr>
+            <td><code>out/super.bin</code></td>
+            <td>8.5 GB</td>
+            <td>Dynamic</td>
+            <td>system/product/vendor/system_ext/mi_ext</td>
+          </tr>
+          <tr>
+            <td><code>out/md1img_a.bin</code></td>
+            <td>200 MB</td>
+            <td>Raw модема</td>
+            <td>2G/3G/4G/5G firmware</td>
+          </tr>
+          <tr>
+            <td><code>out/md1img_b.bin</code></td>
+            <td>200 MB</td>
+            <td>F2FS</td>
+            <td>Другой формат в отличие от слота A</td>
+          </tr>
+          <tr>
+            <td><code>out/scp_a/b.bin</code></td>
+            <td>6 MB each</td>
+            <td>ATF fw</td>
+            <td>Сенсорный сопроцессор</td>
+          </tr>
+          <tr>
+            <td><code>out/gz_a/b.bin</code></td>
+            <td>32 MB each</td>
+            <td>ATF fw</td>
+            <td>GenieZone</td>
+          </tr>
+          <tr>
+            <td><code>out/cam_vpu1/2/3_a/b.bin</code></td>
+            <td>15 MB each</td>
+            <td>ATF fw</td>
+            <td>Камерный VPU</td>
+          </tr>
+          <tr>
+            <td><code>out/spmfw_a/b.bin</code></td>
+            <td>1 MB each</td>
+            <td>ATF fw</td>
+            <td>Управление питанием системы</td>
+          </tr>
+          <tr>
+            <td><code>out/sspm_a/b.bin</code></td>
+            <td>1 MB each</td>
+            <td>ATF fw</td>
+            <td>Процессор безопасности системы</td>
+          </tr>
+          <tr>
+            <td><code>out/mcupm_a/b.bin</code></td>
+            <td>1 MB each</td>
+            <td>ATF fw</td>
+            <td>Управление питанием MCU</td>
+          </tr>
+          <tr>
+            <td><code>out/dpm_a/b.bin</code></td>
+            <td>4 MB each</td>
+            <td>ATF fw</td>
+            <td>Менеджер путей данных</td>
+          </tr>
+          <tr>
+            <td><code>out/audio_dsp_a/b.bin</code></td>
+            <td>8 MB each</td>
+            <td>ATF fw</td>
+            <td>Аудио DSP (HiFi3)</td>
+          </tr>
+          <tr>
+            <td><code>out/dpm_a/b.bin</code></td>
+            <td>4 MB each</td>
+            <td>ATF fw</td>
+            <td>Менеджер путей данных</td>
+          </tr>
+          <tr>
+            <td><code>out/vendor_boot_a/b.bin</code></td>
+            <td>64 MB each</td>
+            <td>ALL ZEROS</td>
+            <td>Empty</td>
+          </tr>
+          <tr>
+            <td><code>out/dtbo_a/b.bin</code></td>
+            <td>32 MB each</td>
+            <td>DTB blob</td>
+            <td>Overlay дерева устройств</td>
+          </tr>
+          <tr>
+            <td><code>out/logo_a/b.bin</code></td>
+            <td>64 MB each</td>
+            <td>Raw</td>
+            <td>Boot logo</td>
+          </tr>
+          <tr>
+            <td><code>out/expdb.bin</code></td>
+            <td>40 MB</td>
+            <td>dBase IV</td>
+            <td>Журнал системных событий</td>
+          </tr>
+          <tr>
+            <td><code>out/nvcfg.bin</code></td>
+            <td>32 MB</td>
+            <td>ext4</td>
+            <td>Конфигурация NVRAM</td>
+          </tr>
+          <tr>
+            <td><code>out/nvdata.bin</code></td>
+            <td>64 MB</td>
+            <td>ext4</td>
+            <td>NVRAM data</td>
+          </tr>
+          <tr>
+            <td><code>out/nvram.bin</code></td>
+            <td>64 MB</td>
+            <td>NVRAM blob</td>
+            <td>Raw NVRAM</td>
+          </tr>
+          <tr>
+            <td><code>out/persist.bin</code></td>
+            <td>66 MB</td>
+            <td>ext4</td>
+            <td>Постоянное хранилище</td>
+          </tr>
+          <tr>
+            <td><code>out/metadata.bin</code></td>
+            <td>32 MB</td>
+            <td>ext4</td>
+            <td>Метаданные</td>
+          </tr>
+          <tr>
+            <td><code>out/protect1/2.bin</code></td>
+            <td>8 MB each</td>
+            <td>ext4</td>
+            <td>Защищённое хранилище</td>
+          </tr>
+          <tr>
+            <td><code>out/rescue.bin</code></td>
+            <td>128 MB</td>
+            <td>ext2</td>
+            <td>Режим восстановления</td>
+          </tr>
+          <tr>
+            <td><code>out/userdata.bin</code></td>
+            <td>1.59 GB</td>
+            <td>Raw</td>
+            <td>User data</td>
+          </tr>
+          <tr>
+            <td><code>out/misc.bin</code></td>
+            <td>4 MB</td>
+            <td>Data</td>
+            <td>Служебные данные загрузки</td>
+          </tr>
+          <tr>
+            <td><code>out/frp.bin</code></td>
+            <td>1 MB</td>
+            <td>Data</td>
+            <td>Защита от сброса к заводским настройкам</td>
+          </tr>
+          <tr>
+            <td><code>out/countrycode.bin</code></td>
+            <td>2 MB</td>
+            <td>ALL ZEROS</td>
+            <td>Код страны</td>
+          </tr>
+          <tr>
+            <td><code>out/boot_para.bin</code></td>
+            <td>32 MB</td>
+            <td>Data</td>
+            <td>Параметры загрузки</td>
+          </tr>
+          <tr>
+            <td><code>out/proinfo.bin</code></td>
+            <td>3 MB</td>
+            <td>Data</td>
+            <td>Информация о продукте</td>
+          </tr>
+          <tr>
+            <td><code>out/opconfig.bin</code></td>
+            <td>20 MB</td>
+            <td>Data</td>
+            <td>Конфигурация оператора</td>
+          </tr>
+          <tr>
+            <td><code>out/opcust.bin</code></td>
+            <td>400 MB</td>
+            <td>Data</td>
+            <td>Настройки оператора</td>
+          </tr>
+          <tr>
+            <td><code>out/oem_misc1.bin</code></td>
+            <td>16 MB</td>
+            <td>Data</td>
+            <td>Разное OEM</td>
+          </tr>
+          <tr>
+            <td><code>out/oops.bin</code></td>
+            <td>16 MB</td>
+            <td>Data</td>
+            <td>Журналы сбоев</td>
+          </tr>
+          <tr>
+            <td><code>out/mem.bin</code></td>
+            <td>4 MB</td>
+            <td>Data</td>
+            <td>Дамп памяти</td>
+          </tr>
+          <tr>
+            <td><code>out/ffu.bin</code></td>
+            <td>8 MB</td>
+            <td>Data</td>
+            <td>Полевое обновление прошивки</td>
+          </tr>
+          <tr>
+            <td><code>out/para.bin</code></td>
+            <td>512 KB</td>
+            <td>Data</td>
+            <td>Parameters</td>
+          </tr>
+          <tr>
+            <td><code>out/backup1/2.bin</code></td>
+            <td>1 MB each</td>
+            <td>Data</td>
+            <td>Backup</td>
+          </tr>
+          <tr>
+            <td><code>out/backup3.bin</code></td>
+            <td>16 MB</td>
+            <td>Data</td>
+            <td>Backup</td>
+          </tr>
+          <tr>
+            <td><code>out/backup4.bin</code></td>
+            <td>64 MB</td>
+            <td>Data</td>
+            <td>Backup</td>
+          </tr>
+          <tr>
+            <td><code>out/backup5.bin</code></td>
+            <td>134 MB</td>
+            <td>Data</td>
+            <td>Backup</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr>
+      <h2 id="2-boot-chain-overview">2. Обзор цепочки загрузки</h2>
+      <p>Стандартная 4-этапная цепочка MediaTek:</p>
+      <div class="flow">
+        <div class="fbox">
+          <div class="fbox-title">Цепочка загрузки</div>
+          <div class="fv">
+            <div class="fv-row"><span class="fnode accent">Сброс при включении питания</span></div>
+            <div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20">
+                <line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5" />
+                <polygon points="4,14 6,18 8,14" fill="currentColor" />
+              </svg></div>
+            <div class="fv-row"><span class="fnode accent">ЭТАП 1: BROM (Boot ROM) — 128 КБ, в кристалле SoC</span>
+            </div>
+            <div class="fv-row"><span class="fnode dim sm">Роль: HW инициализация, определение источника загрузки, загрузка preloader + проверка RSA</span></div>
+            <div class="fv-row"><span class="fnode dim sm">Вход: ARM @ 0x0 → Thumb @ 0xDA70</span></div>
+            <div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20">
+                <line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5" />
+                <polygon points="4,14 6,18 8,14" fill="currentColor" />
+              </svg></div>
+            <div class="fv-row"><span class="fnode accent">ЭТАП 2: Preloader — 472 КБ, загрузка @ 0x100000</span></div>
+            <div class="fv-row"><span class="fnode dim sm">Роль: Инициализация DRAM (LPDDR4x), разбор GPT, загрузка LK/загрузочного образа + проверка RSA-2048</span></div>
+            <div class="fv-row"><span class="fnode dim sm">Вход: Thumb2 @ 0x10066C</span></div>
+            <div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20">
+                <line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5" />
+                <polygon points="4,14 6,18 8,14" fill="currentColor" />
+              </svg></div>
+            <div class="fv-row"><span class="fnode accent">ЭТАП 3: LK (Little Kernel) — 8 МБ, выполнение @ 0x48200000</span>
+            </div>
+            <div class="fv-row"><span class="fnode dim sm">Роль: Инициализация дисплея, выбор режима загрузки, AVB, загрузка Android boot image, переход к ядру</span></div>
+            <div class="fv-row"><span class="fnode dim sm">Вход: ARM @ 0x48200200 → перемещён @ 0x48200080 → lk_main @ 0x4827AEC</span></div>
+            <div class="farr-v"><svg width="12" height="20" viewBox="0 0 12 20">
+                <line x1="6" y1="2" x2="6" y2="16" stroke="currentColor" stroke-width="1.5" />
+                <polygon points="4,14 6,18 8,14" fill="currentColor" />
+              </svg></div>
+            <div class="fv-row"><span class="fnode accent">ЭТАП 4: Ядро Linux (boot.img) — AArch64</span></div>
+            <div class="fv-row"><span class="fnode dim sm">Роль: Android OS</span></div>
+          </div>
+        </div>
+      </div>
+      <p>Общий размер устройства: ~31,9 ГБ (62480383 сектора × 512 Б), логические сектора по 4096 байт.</p>
+      <hr>
+      <h2 id="3-stage-1-brom">3. ЭТАП 1: BROM</h2>
+      <h3 id="reset-vector--early-init">Вектор сброса и ранняя инициализация</h3>
+      <ul>
+        <li>ARM режим при включении питания, BROM отображён в памяти по адресу 0x0</li>
+        <li>Вектор сброса (0x00): <code>B 0x54</code> — переход через векторы исключений</li>
+        <li>Векторы исключений (0x04-0x3C): все бесконечные циклы (не используются в BROM)</li>
+        <li><strong>Сохранение контекста (0x10-0x3C):</strong> сохраняет r0-r4, LR, CP15 c5/c6 конфигурацию MPU в <code>0x00102B60</code>
+        </li>
+        <li>r0 = выбор устройства загрузки (eMMC/UFS/SDMMC)</li>
+        <li>r1-r4 = конфигурация загрузки</li>
+        <li><strong>Main init (0x54):</strong> zero regs, <code>early_hardware_init()</code>, SVC stack @ 0x00013084,
+          <code>secure_init()</code>, <code>clock_init()</code>, <code>watchdog_disable()</code></li>
+        <li><strong>BLX 0xDA70</strong> → переключение в Thumb режим</li>
+      </ul>
+      <h3 id="main-brom-thumb-0xda70">Основной BROM (Thumb, 0xDA70+)</h3>
+      <ol>
+        <li><strong>Определение источника загрузки:</strong> eMMC/UFS/COMBO (строки @ 0x12B4)</li>
+        <li><strong>Инициализация контроллера хранилища</strong></li>
+        <li><strong>Проверка заголовка TIMESTMP</strong></li>
+        <li><strong>Загрузка Preloader:</strong> сканирование заголовка GFH (<code>MMM\x01</code>), разбор GFH_FILE_INFO, копирование в SRAM 0x100000, проверка подписи через встроенный открытый ключ</li>
+        <li><strong>Режим загрузки по USB (USBDL):</strong> ACM USB виртуальный COM-порт, ожидает подписанный DA</li>
+        <li><strong>Переход к preloader:</strong> BX @ 0x10066C</li>
+      </ol>
+      <p><strong>BROM НЕ выполняет:</strong> инициализацию DRAM, разбор файловых систем, верификацию загрузочного образа.</p>
+      <h3 id="brom-memory-layout-during-execution">Карта памяти BROM (во время выполнения)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Адрес</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>0x00000000</code></td>
+            <td>Код BROM (только чтение, в кристалле)</td>
+          </tr>
+          <tr>
+            <td><code>0x00013084</code></td>
+            <td>Указатель стека SVC</td>
+          </tr>
+          <tr>
+            <td><code>0x0001308C</code></td>
+            <td>База стека SVC</td>
+          </tr>
+          <tr>
+            <td><code>0x00013090</code></td>
+            <td>База стека IRQ</td>
+          </tr>
+          <tr>
+            <td><code>0x00013150</code></td>
+            <td>Указатель стека IRQ</td>
+          </tr>
+          <tr>
+            <td><code>0x00102B60</code></td>
+            <td>Область сохранения контекста (32 байта)</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr>
+      <h2 id="4-stage-2-preloader">4. ЭТАП 2: Preloader</h2>
+      <h3 id="gfh-header-chain-0x000-0x0ff">Цепочка заголовков GFH (0x000-0x0FF)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Смещение</th>
+            <th>Тип</th>
+            <th>Размер</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x000</td>
+            <td>GFH_FILE_INFO (0)</td>
+            <td>56 B</td>
+            <td>Дескриптор образа, магия <code>MMM\x01</code>, flash_type=0x0F00 (eMMC загрузка), load_addr=0x100000, entry=0x66C</td>
+          </tr>
+          <tr>
+            <td>0x038</td>
+            <td>GFH_BL_INFO (1)</td>
+            <td>12 B</td>
+            <td>Информация/версия загрузчика</td>
+          </tr>
+          <tr>
+            <td>0x044</td>
+            <td>GFH_BL_SEC_KEY (7)</td>
+            <td>100 B</td>
+            <td>Встроенный открытый ключ RSA (данные @ 0x50) для BROM→preloader проверки</td>
+          </tr>
+          <tr>
+            <td>0x0A8</td>
+            <td>GFH_ATTEST (2)</td>
+            <td>20 B</td>
+            <td>Данные аттестации</td>
+          </tr>
+          <tr>
+            <td>0x0BC</td>
+            <td>GFH_BL_LOAD (8)</td>
+            <td>48 B</td>
+            <td>Дескрипторы сегментов загрузки</td>
+          </tr>
+          <tr>
+            <td>0x0EC</td>
+            <td>GFH_BL_ATTR (18)</td>
+            <td>20 B</td>
+            <td>Атрибуты (флаги отладки?)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="preloader-mmm-section-types">Типы секций MMM Preloader</h3>
+      <p>Помимо GFH, preloader содержит секции типа MMM со следующими ролями:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Тип MMM</th>
+            <th>Содержимое</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x01 (FILE_INFO)</td>
+            <td>Метаданные сборки/версии</td>
+          </tr>
+          <tr>
+            <td>0x0c</td>
+            <td>AND_ROMINFO_v — конфигурация ROM</td>
+          </tr>
+          <tr>
+            <td>0x12</td>
+            <td>AND_SECCTRL_v — управление безопасностью</td>
+          </tr>
+          <tr>
+            <td>0x14</td>
+            <td>AND_SECRO_v — конфигурация защищённой области</td>
+          </tr>
+          <tr>
+            <td>0x30</td>
+            <td><strong>Прошивка ATF</strong> (встроенные образы BL3x)</td>
+          </tr>
+          <tr>
+            <td>0x64</td>
+            <td>Данные управления безопасностью</td>
+          </tr>
+          <tr>
+            <td>0x77</td>
+            <td>Дополнительная информация о разделах/GPT</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="file-layout">Структура файла</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Адрес</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x000-0x0FF</td>
+            <td>Заголовки GFH</td>
+          </tr>
+          <tr>
+            <td>0x100-0x26C</td>
+            <td>Стартовый код ARM</td>
+          </tr>
+          <tr>
+            <td>0x300-0x340</td>
+            <td>Область данных GFH</td>
+          </tr>
+          <tr>
+            <td>0x100-0x57FFF</td>
+            <td>Код Thumb2</td>
+          </tr>
+          <tr>
+            <td>0x58000-0x6F000</td>
+            <td>строки / rodata</td>
+          </tr>
+          <tr>
+            <td>0x72000-0x73634</td>
+            <td>GOT (544 ссылок на строки LDR+ADD)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="execution">Выполнение</h3>
+      <ul>
+        <li>Стек @ SRAM 0x200000+, инициализация PLL/DRAM/pinmux</li>
+        <li><strong>Инициализация DRAM:</strong> LPDDR4x (с поддержкой LPDDR5) через шину PMIC/SPI, обучение Ca, калибровка DQS, калибровка Vref, DVFSC (Dynamic Voltage & Frequency Scaling), многоканальный контроллер DRAM (DRAMC), измерение частоты DDR</li>
+        <li><strong>Разбор GPT:</strong> чтение таблицы разделов (заголовок LBA 1, записи LBA 2-33)</li>
+        <li><strong>Верификация образов:</strong> RSA-2048 + SHA-256 для LK, boot, recovery, TEE образов</li>
+      </ul>
+      <h3 id="key-functions">Ключевые функции</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Функция</th>
+            <th>Адрес</th>
+            <th>Роль</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>preloader_main</code></td>
+            <td>0x343C0</td>
+            <td>Точка входа</td>
+          </tr>
+          <tr>
+            <td><code>partition_init</code></td>
+            <td>0x45CC0</td>
+            <td>Инициализация разделов</td>
+          </tr>
+          <tr>
+            <td><code>partition_loader</code></td>
+            <td>0xD750</td>
+            <td>Загрузка разделов (вызывает verify @ 0xD7E0)</td>
+          </tr>
+          <tr>
+            <td><code>image_loader</code></td>
+            <td>0x3E780</td>
+            <td>Основной загрузчик (вызывает 0x50CD4 @ 0x3E66C, 0x50F94 @ 0x3E848)</td>
+          </tr>
+          <tr>
+            <td><code>RSA_verify_main</code></td>
+            <td>0x50CD4</td>
+            <td>Верификация RSA-2048 + SHA-256</td>
+          </tr>
+          <tr>
+            <td><code>image_auth_check</code></td>
+            <td>0x50F94</td>
+            <td>SHA-256 + сравнение хеша</td>
+          </tr>
+          <tr>
+            <td><code>SHA256</code></td>
+            <td>0x50B14</td>
+            <td>Вычисление SHA-256</td>
+          </tr>
+          <tr>
+            <td><code>RSA_verify</code></td>
+            <td>0x51B98</td>
+            <td>Проверка подписи RSA</td>
+          </tr>
+          <tr>
+            <td><code>hash_compare</code></td>
+            <td>0x51D48</td>
+            <td>Сравнение хеша</td>
+          </tr>
+          <tr>
+            <td><code>printf</code></td>
+            <td>0x43B94</td>
+            <td>Отладочный вывод</td>
+          </tr>
+          <tr>
+            <td><code>malloc</code></td>
+            <td>0x47494</td>
+            <td>Выделение памяти</td>
+          </tr>
+          <tr>
+            <td><code>memcpy/memset</code></td>
+            <td>0x47298+</td>
+            <td>Операции с памятью</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>Цепочка верификации:</strong></p>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">partition_loader (0xD750)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">image_loader (0x3E780)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">RSA_verify_main @ 0x50CD4 (RSA-2048 sig + SHA-256
+                hash)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">image_auth_check @ 0x50F94 (SHA-256 + hash
+                compare)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">TEE verify (0x512B8-0x51400)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">firmware hash check (0x51118-0x5128A)</span></div>
+          </div>
+        </div>
+      </div>
+      <h3 id="jump-to-lk">Переход к LK</h3>
+      <div class="fchain"><span class="fnode">Разбор заголовка LK BR</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">копирование в 0x48200000</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">установка аргументов загрузки</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">очистка кешей</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">переход к точке входа LK.</span></div>
+      <hr>
+      <h2 id="5-stage-3-lk-little-kernel">5. ЭТАП 3: LK (Little Kernel)</h2>
+      <h3 id="binary-format-mediatek-br-header">Формат бинарного файла (заголовок BR Mediatek)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Смещение</th>
+            <th>Поле</th>
+            <th>Значение</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x000</td>
+            <td>magic1</td>
+            <td>0x58881688</td>
+            <td>Магия заголовка BR</td>
+          </tr>
+          <tr>
+            <td>0x004</td>
+            <td>total_size</td>
+            <td>0x1BF668 (1.83 MB)</td>
+            <td>Размер кодовой части</td>
+          </tr>
+          <tr>
+            <td>0x008</td>
+            <td>signature</td>
+            <td>"lk\0\0\0\0\0\0"</td>
+            <td>Идентификатор загрузочного образа</td>
+          </tr>
+          <tr>
+            <td>0x030</td>
+            <td>magic2</td>
+            <td>0x58891689</td>
+            <td>Вторая магия</td>
+          </tr>
+          <tr>
+            <td>0x034</td>
+            <td>load_address</td>
+            <td>0x200</td>
+            <td>Смещение в пункте назначения</td>
+          </tr>
+          <tr>
+            <td>0x038</td>
+            <td>flags</td>
+            <td>0x1</td>
+            <td>BR_RAW (сырой бинарник)</td>
+          </tr>
+          <tr>
+            <td>0x044</td>
+            <td>entry_point</td>
+            <td>0x10</td>
+            <td>Вход = load_addr + entry</td>
+          </tr>
+          <tr>
+            <td>0x048-0x1FF</td>
+            <td>padding</td>
+            <td>0xFFFF</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>0x200+</td>
+            <td>ARM код</td>
+            <td>—</td>
+            <td>Исполняемый код начинается</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Загруженный вход: 0x48200000 + 0x10 = 0x48200010 → перемещён в 0x48200080.</p>
+      <h3 id="entry--self-relocation">Точка входа и саморелокация</h3>
+      <ul>
+        <li>ARM exception vectors at 0x200 (B to handlers at 0x25620+)</li>
+        <li>Save boot source from r4 → <code>0x48200020</code></li>
+        <li>Disable MMU/D-cache, enable alignment check (SCTLR)</li>
+        <li>Self-relocation: copy <code>0x48200000-0x483BF668</code> to same range (if loaded elsewhere)</li>
+        <li>BX to relocated code @ 0x48200080</li>
+      </ul>
+      <h3 id="stack-setup--0x48200080">Настройка стека @ 0x48200080</h3>
+      <p>Все режимы используют общую область стека в 0x483C38EC (IRQ получает отдельный указатель):</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Режим</th>
+            <th>CPSR Value</th>
+            <th>Stack</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IRQ</td>
+            <td>0x12</td>
+            <td>0x483C38EC (separate)</td>
+          </tr>
+          <tr>
+            <td>FIQ</td>
+            <td>0x11</td>
+            <td>Reuses SVC</td>
+          </tr>
+          <tr>
+            <td>Abort</td>
+            <td>0x17</td>
+            <td>Reuses SVC</td>
+          </tr>
+          <tr>
+            <td>Undefined</td>
+            <td>0x1B</td>
+            <td>Reuses SVC</td>
+          </tr>
+          <tr>
+            <td>System</td>
+            <td>0x1F</td>
+            <td>Reuses SVC</td>
+          </tr>
+          <tr>
+            <td>Supervisor</td>
+            <td>0x13</td>
+            <td>Reuses SVC</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="bss-zeroing">Обнуление BSS</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>LDR</th>
+            <th>r0, =0x48338D60</th>
+            <th>; BSS start</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>LDR</td>
+            <td>r1, =0x48338D60</td>
+            <td>; ← NOTE: start == end? possibly wrong</td>
+          </tr>
+          <tr>
+            <td>LDR</td>
+            <td>r2, =0x483BF668</td>
+            <td>; Actual BSS end from copy size</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td>; BSS zero loop</td>
+          </tr>
+          <tr>
+            <td>BLX</td>
+            <td>0x4827AEC</td>
+            <td>; lk_main()</td>
+          </tr>
+          <tr>
+            <td>B</td>
+            <td>0x4820314</td>
+            <td>; Infinite loop (should never reach)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="lk_main-0x4827aec">lk_main (0x4827AEC)</h3>
+      <ol>
+        <li><strong>Architecture init:</strong> MMU, page tables, D-cache, TLB</li>
+        <li><strong>Platform init:</strong> UART, clock tree, GPIO (MT6877)</li>
+        <li><strong>Display init:</strong> panel, backlight, framebuffer</li>
+        <li><strong>Boot mode detection:</strong> PMIC/registers → normal/recovery/fastboot/meta</li>
+        <li><strong>AVB verification:</strong> vbmeta parse, hash verify, boot state determination</li>
+        <li><strong>Boot image loading:</strong> GPT → read Android boot image → load kernel+ramdisk+DTB</li>
+        <li><strong>Kernel boot:</strong> AArch64 mode → branch to kernel entry</li>
+      </ol>
+      <h3 id="code-architecture">Архитектура кода</h3>
+      <ul>
+        <li>836 functions identified (Thumb2 prologue patterns)</li>
+        <li>All code in range 0x5AC–0x7F6A6 (below 0x80000)</li>
+        <li>Data/strings/rodata from 0x110000+</li>
+      </ul>
+      <h3 id="isa-mode-split">Разделение по режимам ISA</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Область</th>
+            <th>Режим</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x230 – 0x300+</td>
+            <td>ARM</td>
+            <td>Relocator + mode init</td>
+          </tr>
+          <tr>
+            <td>0x300 – ~0x1BF668</td>
+            <td>Thumb2</td>
+            <td>Main LK code + libraries</td>
+          </tr>
+          <tr>
+            <td>~0x1BF668 – 0x800000</td>
+            <td>mixed</td>
+            <td>DTB, embedded resources, logo</td>
+          </tr>
+        </tbody>
+      </table>
+      <ul>
+        <li><strong>124</strong> ARM function prologues (STMFD SP!)</li>
+        <li><strong>1209</strong> Thumb2 function prologues (PUSH)</li>
+      </ul>
+      <h3 id="string-reference-pattern-ldradd">Паттерн ссылок на строки (LDR+ADD)</h3>
+      <p>LK uses PC-relative LDR + ADD to reference strings (no GOT indirection):</p>
+      <pre><code class="language-armasm">ldr rN, [pc, #imm12]     ; load 32-bit literal from pool
+add rN, pc               ; rN = literal + PC → absolute string address
+</code></pre>
+      <p><strong>Target computation:</strong> <code>lit_val + ((add_addr + 4) &amp;amp; ~3)</code></p>
+      <p><strong>Encodings:</strong> 16-bit LDR(literal) = <code>01001 Rt imm8</code>, 32-bit LDR.W =
+        <code>0xF8DF imm12</code>; 16-bit ADD Rd,PC = <code>0x4478 | Rd</code>, 32-bit ADD = <code>0xEB0x</code> prefix.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Область</th>
+            <th>Смещение в файле</th>
+            <th>Содержимое</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Startup</td>
+            <td>0x200-0x3000</td>
+            <td>ARM32 init, CP15, relocation</td>
+          </tr>
+          <tr>
+            <td>Kernel core</td>
+            <td>0x3000-0x80000</td>
+            <td>Threading, IPC, timers</td>
+          </tr>
+          <tr>
+            <td>Platform</td>
+            <td>0x80000-0x100000</td>
+            <td>MT6877 init, clocks, GPIO</td>
+          </tr>
+          <tr>
+            <td>AVB</td>
+            <td>0x100000-0x110000</td>
+            <td>Android Verified Boot 2.0</td>
+          </tr>
+          <tr>
+            <td>Fastboot</td>
+            <td>0x110000-0x120000</td>
+            <td>Fastboot protocol, OEM commands</td>
+          </tr>
+          <tr>
+            <td>SECCFG</td>
+            <td>0x136000-0x138000</td>
+            <td>Security config read/write</td>
+          </tr>
+          <tr>
+            <td>SECLIB</td>
+            <td>0x137000-0x138000</td>
+            <td>Security library (SEC_UNLOCK, SECLIB_IMG_VERIFY)</td>
+          </tr>
+          <tr>
+            <td>MiCustom</td>
+            <td>0x1bedca-0x1c0000</td>
+            <td>Mi unlock token, lock state</td>
+          </tr>
+          <tr>
+            <td>ATF wrapper</td>
+            <td>0x1c0000-0x1e0000</td>
+            <td>ARM TF SMC calls</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr>
+      <h2 id="6-lk-fastboot">6. LK Fastboot</h2>
+      <h3 id="command-dispatch">Диспетчеризация команд</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">fastboot_loop:</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">read USB command into buf</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">match against registered table (array of {char *name,
+                void (*handler)()})</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">if matched → call handler(cmd, arg, reply)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">if "oem *" → strip "oem ", match subcommand</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">if not matched → "unknown command"</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">if not allowed in state → "not allowed in locked
+                state"</span></div>
+          </div>
+        </div>
+      </div>
+      <p>Таблица команд в файле 0xAB0C8, цикл диспетчеризации в 0xAAE78. Форматы ответов: <code>OKAY</code>,
+        <code>FAIL&lt;message&gt;</code>, <code>INFO&lt;message&gt;</code>,
+        <code>DATA&lt;size&gt;&lt;data&gt;</code>.</p>
+      <h3 id="data-structures">Структуры данных</h3>
+      <pre><code class="language-c">struct fastboot_cmd {
+    const char *name;      // e.g. "flash:", "oem unlock"
+    void (*handler)(const char *arg, unsigned sz, char *reply);
+};
+
+struct seccfg {
+    uint32_t magic;         // validation magic
+    uint32_t lock_state;    // 0=locked, 1=unlockable, 2=unlocked
+    uint32_t unlock_ability;
+    uint32_t dm_verity_state;
+};
+</code></pre>
+      <h3 id="standard-commands">Стандартные команды</h3>
+      <p><code>getvar:</code>, <code>flash:</code>, <code>erase:</code>, <code>download:</code>, <code>continue</code>,
+        <code>reboot-bootloader</code>, <code>reboot-recovery</code>, <code>reboot-fastboot</code>,
+        <code>set_active:</code></p>
+      <h3 id="getvar-variables">Переменные getvar</h3>
+      <p><code>version</code> (0.5), <code>version-preloader</code>, <code>version-bootloader</code>,
+        <code>version-baseband</code></p>
+      <p><code>has-slot:&amp;lt;partition&amp;gt;</code>, <code>has-slot:preloader</code>, <code>current-slot</code>,
+        <code>slot-count</code> (2)</p>
+      <p><code>slot-successful:a/b</code>, <code>slot-unbootable:a/b</code>, <code>slot-retry-count:a/b</code></p>
+      <p><code>is-userspace</code>, <code>signature</code>, <code>partition-type:&amp;lt;name&amp;gt;</code>,
+        <code>partition-size:&amp;lt;name&amp;gt;</code></p>
+      <p><code>max-download-size</code>, <code>product</code>, <code>variant</code>, <code>crc</code>,
+        <code>fuse</code>, <code>secure</code>, <code>unlocked</code></p>
+      <p><code>warranty</code>, <code>battery-voltage</code>, <code>battery-soc-ok</code>, <code>hw-revision</code></p>
+      <p><code>erase-block-size</code>, <code>logical-block-size</code>, <code>off-mode-charge</code></p>
+      <p><code>anti</code> (anti-rollback), <code>rpmblock_support</code>, <code>tokenversion</code>,
+        <code>product sku</code></p>
+      <p>Boot state: <code>ab_suffix</code>, slot metadata from <code>publish_ab_variables()</code></p>
+      <h3 id="oem-commands-all-mapped-at-0xab000-0xab600">OEM команды (все отображены в 0xAB000-0xAB600)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Команда</th>
+            <th>Смещение обработчика в файле</th>
+            <th>Назначение</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>oem lkmsg</code></td>
+            <td>0x115B70</td>
+            <td>Дамп журнала сообщений LK</td>
+          </tr>
+          <tr>
+            <td><code>oem lpmsg</code></td>
+            <td>0x115BB0</td>
+            <td>Дамп журнала preloader</td>
+          </tr>
+          <tr>
+            <td><code>oem expdb</code></td>
+            <td>0x11704A</td>
+            <td>Доступ к базе экспериментов</td>
+          </tr>
+          <tr>
+            <td><code>oem p2u</code></td>
+            <td>0xAB3E4</td>
+            <td>Режим питания через USB</td>
+          </tr>
+          <tr>
+            <td><code>oem cdms</code></td>
+            <td>0xAB3EC</td>
+            <td>Управление дампом ядра</td>
+          </tr>
+          <tr>
+            <td><code>oem dump_pllk_log</code></td>
+            <td>0xAB3F8</td>
+            <td>Дамп журнала preloader</td>
+          </tr>
+          <tr>
+            <td><code>oem off-mode-charge</code></td>
+            <td>0xA51BD</td>
+            <td>Управление режимом зарядки</td>
+          </tr>
+          <tr>
+            <td><code>oem key</code></td>
+            <td>0xAB420</td>
+            <td>Управление ключами OEM</td>
+          </tr>
+          <tr>
+            <td><code>oem lks</code></td>
+            <td>0x11C9A7</td>
+            <td>Получить состояние блокировки (0/1/2)</td>
+          </tr>
+          <tr>
+            <td><code>oem get_token</code></td>
+            <td>0xA86C8</td>
+            <td>Сгенерировать токен разблокировки</td>
+          </tr>
+          <tr>
+            <td><strong><code>oem unlock</code></strong></td>
+            <td><strong>0x11C4FF</strong></td>
+            <td><strong>Разблокировать загрузчик</strong></td>
+          </tr>
+          <tr>
+            <td><code>oem lock</code></td>
+            <td>0xAB4A8</td>
+            <td>Заблокировать загрузчик</td>
+          </tr>
+          <tr>
+            <td><code>oem get_socid</code></td>
+            <td>0x115685</td>
+            <td>Получить уникальный ID SoC</td>
+          </tr>
+          <tr>
+            <td><code>oem scp_status</code></td>
+            <td>0xA3D92</td>
+            <td>Запрос статуса SCP</td>
+          </tr>
+          <tr>
+            <td><code>oem scp_log_thru_ap_uart</code></td>
+            <td>0xA4051</td>
+            <td>Маршрутизация журналов SCP через AP UART</td>
+          </tr>
+          <tr>
+            <td><code>oem usb2jtag</code></td>
+            <td>0x115F9D</td>
+            <td>Мост USB в JTAG</td>
+          </tr>
+          <tr>
+            <td><code>oem mrdump</code></td>
+            <td>0x1157F3</td>
+            <td>Дамп памяти RAM</td>
+          </tr>
+          <tr>
+            <td><code>oem mrdump-output-set</code></td>
+            <td>0x11708C</td>
+            <td>Установить цель вывода mrdump</td>
+          </tr>
+          <tr>
+            <td><code>oem mrdump-file-allocate</code></td>
+            <td>0x11584C</td>
+            <td>Установить выделение mrdump (halfmem/fullmem)</td>
+          </tr>
+          <tr>
+            <td><code>oem mrdump_chkimg</code></td>
+            <td>0x115918</td>
+            <td>Проверить образ mrdump</td>
+          </tr>
+          <tr>
+            <td><code>oem ultraflash:</code></td>
+            <td>0x11BF29</td>
+            <td>Режим быстрой прошивки (расширение MTK)</td>
+          </tr>
+          <tr>
+            <td><code>oem ultraflash_en</code></td>
+            <td>0x11BFDA</td>
+            <td>Переключение ultra-flash</td>
+          </tr>
+          <tr>
+            <td><code>oem poweroff</code></td>
+            <td>0x116454</td>
+            <td>Выключение устройства</td>
+          </tr>
+          <tr>
+            <td><code>oem fbreason</code></td>
+            <td>0xAB594</td>
+            <td>Причина сбоя загрузки</td>
+          </tr>
+          <tr>
+            <td><code>oem printk-ratelimit</code></td>
+            <td>0xAB278</td>
+            <td>Ограничение частоты printk</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="command-table-string-offsets">Смещения строк таблицы команд</h3>
+      <p>All commands registered in a table at the fastboot init region (<code>0xAB000</code>-<code>0xAB600</code>):</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Смещение</th>
+            <th>Команда</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>0xAB110</code></td>
+            <td><code>getvar:</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB268</code></td>
+            <td><code>flash:</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB270</code></td>
+            <td><code>erase:</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB290</code></td>
+            <td><code>continue</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB29C</code></td>
+            <td><code>reboot-bootloader</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB2B0</code></td>
+            <td><code>reboot-recovery</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB2C0</code></td>
+            <td><code>reboot-fastboot</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB3A0</code></td>
+            <td><code>download:</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB554</code></td>
+            <td><code>set_active:</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB278</code></td>
+            <td><code>oem printk-ratelimit</code></td>
+          </tr>
+          <tr>
+            <td><code>0xAB3C0-0xAB594</code></td>
+            <td>All OEM commands (25 entries)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="lock-state-dependent-behavior">Поведение в зависимости от состояния блокировки</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Состояние</th>
+            <th><code>flash:</code></th>
+            <th><code>erase:</code></th>
+            <th><code>oem unlock</code></th>
+            <th><code>oem lock</code></th>
+            <th><code>continue</code></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>LOCKED (0)</td>
+            <td>Заблокировано (кроме подписанных)</td>
+            <td>Заблокировано</td>
+            <td>Запрос/токен</td>
+            <td>Н/Д</td>
+            <td>Нормальная загрузка</td>
+          </tr>
+          <tr>
+            <td>UNLOCKABLE (1)</td>
+            <td>Разблокировано</td>
+            <td>Разблокировано</td>
+            <td>Требуется токен</td>
+            <td>Н/Д</td>
+            <td>Нормальная загрузка</td>
+          </tr>
+          <tr>
+            <td>UNLOCKED (2)</td>
+            <td>Разрешено</td>
+            <td>Разрешено</td>
+            <td>Н/Д</td>
+            <td>Запрос</td>
+            <td>Оранжевый статус</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Key constraints: <code>flash preloader is not permitted</code> always; write-protected partitions blocked;
+        battery check required for flash.</p>
+      <hr>
+      <h2 id="7-seccfg--security-configuration-storage">7. SECCFG — Хранилище конфигурации безопасности</h2>
+      <p>Persistent lock state stored in <code>seccfg</code> partition or NVRAM.</p>
+      <h3 id="structure">Структура</h3>
+      <h4>seccfg</h4>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">magic (4 B) — validation magic</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">lock_state (uint32): 0=LOCKED, 1=UNLOCKABLE, 2=UNLOCKED</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">unlock_ability (uint32) — permission flag</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">dm_verity_state</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">backup copy (redundant storage)</span></div>
+          </div>
+        </div>
+      </div>
+      <h3 id="functions">Функции</h3>
+      <ul>
+        <li><code>seccfg_get_lock_state()</code> / <code>seccfg_set_lock_state(state)</code> — lock state R/W</li>
+        <li><code>seccfg_get_dm_verity_state()</code> / <code>seccfg_set_dm_verity_state()</code> — verity state</li>
+        <li>Initialization validates SECCFG_MAGIC, checks both major + backup copies</li>
+      </ul>
+      <h3 id="deduced-lock-state-to-avb-mapping">Выведенное отображение состояния блокировки на AVB</h3>
+      <pre><code>is_device_unlocked = (seccfg.lock_state == 2)
+</code></pre>
+      <ul>
+        <li>lock_state 0 (LOCKED): full AVB enforcement, only signed images</li>
+        <li>lock_state 1 (UNLOCKABLE): fastboot flash allowed, but AVB still rejects custom vbmeta</li>
+        <li>lock_state 2 (UNLOCKED): AVB verification skipped, custom images allowed</li>
+      </ul>
+      <hr>
+      <h2 id="8-avb-20--verified-boot">8. AVB 2.0 и Verified Boot</h2>
+      <h3 id="components">Компоненты</h3>
+      <p>Полный AOSP libavb интегрирован: <code>avb_slot_verify.c</code>, <code>avb_vbmeta_image.c</code>,
+        <code>avb_hash_descriptor.c</code>, <code>avb_rsa.c</code>, <code>avb_cmdline.c</code> и т.д.</p>
+      <h3 id="boot-states">Состояния загрузки</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Состояние</th>
+            <th>Cmdline</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GREEN</td>
+            <td><code>androidboot.verifiedbootstate=green</code></td>
+            <td>Заблокировано, ОС проверена, без изменений</td>
+          </tr>
+          <tr>
+            <td>YELLOW</td>
+            <td><code>androidboot.verifiedbootstate=yellow</code></td>
+            <td>Заблокировано, ОС подписана ключом разработчика</td>
+          </tr>
+          <tr>
+            <td>ORANGE</td>
+            <td><code>androidboot.verifiedbootstate=orange</code></td>
+            <td>Разблокировано, отображается предупреждение</td>
+          </tr>
+          <tr>
+            <td>RED</td>
+            <td><code>androidboot.verifiedbootstate=red</code></td>
+            <td>Верификация не пройдена/изменено</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="read_is_device_unlocked-callback"><code>read_is_device_unlocked</code> Callback</h3>
+      <p><strong>Strong candidate at 0x7a000</strong> (confirmed in newest analysis):</p>
+      <pre><code class="language-armasm">0x4827a000: push {r4, lr}
+  movs r3, #1; str r3, [r1]     ; default: *out_is_unlocked = TRUE
+  mov r4, r1
+  bl seccfg_parse                 ; returns index
+  bl seccfg_get_value(index)     ; returns value &amp; 1 (bit 0 check)
+  cbz r0, #skip                  ; if bit0 == 0 → stay unlocked
+  movs r3, #0; str r3, [r4]      ; *out_is_unlocked = FALSE
+  bl error_log(0x2014)
+  movs r0, #0                     ; return AVB_IO_RESULT_OK
+  pop {r4, pc}
+</code></pre>
+      <p><strong>Key:</strong> Default <code>is_unlocked = TRUE</code> — if callback fails/short-circuits, device
+        treated as unlocked (verification skipped).</p>
+      <p><strong>Note:</strong> The bit 0 check means lock_state=0 (locked, bit0=0) would be treated as unlocked. This
+        contradiction suggests either:</p>
+      <ol>
+        <li>Lock state encoding differs from documented 0/1/2</li>
+        <li>The function handles error fallthrough (unreadable seccfg = unlocked)</li>
+        <li>This may be a different ops callback (not read_is_device_unlocked)</li>
+      </ol>
+      <p>The <code>UBFX #1</code> variant at 0x1a4c4 correctly isolates bit 1 (=2), matching
+        <code>lock_state == 2</code> — this is likely the real lock check, but only called from init path (0x8d2).</p>
+      <h3 id="calling-chain-avb_slot_verify">Цепочка вызовов (avb_slot_verify)</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">aboot_init (or similar)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">avb_slot_verify (via fn ptr, address unknown)</span>
+            </div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">load_and_verify_vbmeta (0x67424)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">initialize_persistent_digest (0x67308)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">ops-&gt;read_is_device_unlocked (ops+0x24, via
+                blx)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">read_is_device_unlocked callback</span></div>
+          </div>
+        </div>
+      </div>
+      <p>No direct BL callers for <code>initialize_persistent_digest</code> or <code>load_and_verify_vbmeta</code> —
+        entire chain invoked through function pointers.</p>
+      <h3 id="initialize_persistent_digest-0x67308"><code>initialize_persistent_digest</code> (0x67308)</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x48267312: ldr r6, [r0, #0x24] ; r6 =
+                ops-&gt;read_is_device_unlocked</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x48267314: movs r1, #1 ; default is_unlocked =
+                TRUE</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x48267316: str r1, [r4, #-0x4]! ; store to local</span>
+            </div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x4826731a: mov r1, r4 ; r1 = &amp;is_unlocked</span>
+            </div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x48267322: blx r6 ; call read_is_device_unlocked(ops,
+                &amp;is_unlocked)</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="fchain"><span class="fnode">Return flow: r0==1</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">treat as locked; r0==0 AND is_unlocked</span><span class="farr"><svg
+            width="24" height="16" viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">true</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">skip verification; r0==0 AND is_unlocked</span><span class="farr"><svg
+            width="24" height="16" viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">false</span><span class="farr"><svg width="24" height="16"
+            viewBox="0 0 24 16">
+            <line x1="2" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="1.5" />
+            <polygon points="18,4 22,8 18,12" fill="currentColor" />
+          </svg></span><span class="fnode">locked path.</span></div>
+      <p><strong>Critical:</strong> Default <code>is_unlocked = TRUE</code> — if callback fails, device treated as
+        unlocked.</p>
+      <h3 id="avbops-struct-location">Расположение структуры AvbOps</h3>
+      <p><strong>Not found</strong> as static global. Two candidates eliminated:</p>
+      <ul>
+        <li><code>0x1bee34</code>: fn ptrs point to hw/clk dispatch (not AvbOps)</li>
+        <li><code>0x13df88</code>: fn ptrs point to storage vtable (not AvbOps)</li>
+      </ul>
+      <p><strong>Conclusion:</strong> AvbOps is dynamically allocated / on stack, or filled at runtime via
+        struct-to-struct copy (template pattern).</p>
+      <h3 id="twin-candidate-at-0x7a02c">Двойник-кандидат в 0x7a02c</h3>
+      <p>A twin function at <code>0x7a02c</code> has identical structure to the primary at <code>0x7a000</code>.</p>
+      <h3 id="seccfg_parse-0x1a44c"><code>seccfg_parse</code> (0x1a44c)</h3>
+      <p>Iterates through table of 4-fn groups from a global struct, calls each with <code>(ops, fn_param)</code>. Max
+        23 groups (0x17), each 28 bytes. Returns group index or 0.</p>
+      <h3 id="seccfg_get_value-0x1a388"><code>seccfg_get_value</code> (0x1a388)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>rsb r6, r6, r6, lsl #3</th>
+            <th>; r6 = index * 7 (struct offset multiplier)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>add.w r3, r3, r6, lsl #2 ; r3 = base + index * 28</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>ite eq</td>
+            <td>; if read_param == 3</td>
+          </tr>
+          <tr>
+            <td>ldrbeq r0, [r3, #0x15]</td>
+            <td>; byte at +0x15</td>
+          </tr>
+          <tr>
+            <td>ldrbne r0, [r3, #0x14]</td>
+            <td>; byte at +0x14</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Returns byte from seccfg struct at offset +0x14 or +0x15.</p>
+      <h3 id="related-avb-strings-not-yet-referenced">Связанные строки AVB, ещё не найденные в коде</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Строка</th>
+            <th>Смещение в файле</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Error getting device lock state.</code></td>
+            <td>0x1319a8</td>
+            <td>Referenced by 0x67308 (confirmed)</td>
+          </tr>
+          <tr>
+            <td><code>get lock state fail</code></td>
+            <td>0x137bf8</td>
+            <td>Caller unknown</td>
+          </tr>
+          <tr>
+            <td><code>dump lock_state, 0x%x</code></td>
+            <td>0x136fe9</td>
+            <td>No LDR literal</td>
+          </tr>
+          <tr>
+            <td><code>lock_state(default) = 0x%x</code></td>
+            <td>0x8b375</td>
+            <td>No LDR literal</td>
+          </tr>
+          <tr>
+            <td><code>SEC_UNLOCK</code></td>
+            <td>0x137244</td>
+            <td>No LDR literal</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="key-uncertainties-avb">Ключевые неопределённости (AVB)</h3>
+      <ol>
+        <li><strong>Where is AvbOps struct allocated?</strong> Not in static data sections.</li>
+        <li><strong>Is 0x7a000 the real <code>read_is_device_unlocked</code>?</strong> Signature matches but bit 0 check
+          contradicts lock_state=0.</li>
+        <li><strong>What stores 0x7a000 into ops+0x24?</strong> Ops struct init code not found.</li>
+        <li><strong>Which function calls <code>avb_slot_verify</code>?</strong> Called via fn ptr; boot init function
+          unknown.</li>
+      </ol>
+      <h3 id="next-steps-avb">Следующие шаги (AVB)</h3>
+      <ol>
+        <li>Find code storing 0x7a000 into [base+0x24] to confirm candidate identity</li>
+        <li>Check if 0x7a000 matches <code>read_persistent_value</code> (ops+0x20) instead of
+          <code>read_is_device_unlocked</code> (ops+0x24)</li>
+        <li>Trace global struct used by 0x1a388 to determine lock_state encoding</li>
+        <li>Disasm function at 0x8d2 to understand UBFX bit-1 check and AVB relationship</li>
+      </ol>
+      <h3 id="dead-code-avb20-lock_state--0xx-at-0x12f22c">Dead Code: <code>[AVB20] lock_state = 0x%x</code> at 0x12F22C
+      </h3>
+      <p>This debug string is <strong>not referenced by any code</strong> — dprintf was conditionally compiled out but
+        string remained in .rodata.</p>
+      <hr>
+      <h2 id="9-micustom-layer--xiaomi-unlock-logic">9. Слой MiCustom — Логика разблокировки Xiaomi</h2>
+      <h3 id="api-surface">Поверхность API</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Функция</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>mi_get_lock_state()</code></td>
+            <td>Read lock state from SECCFG</td>
+          </tr>
+          <tr>
+            <td><code>mi_set_lock_state(state)</code></td>
+            <td>Write lock state to SECCFG, validates transitions</td>
+          </tr>
+          <tr>
+            <td><code>mi_gen_unlock_token()</code></td>
+            <td>Сгенерировать токен разблокировки bound to device identity</td>
+          </tr>
+          <tr>
+            <td><code>miunlock verity()</code></td>
+            <td>Verify unlock token signature (RSA-2048)</td>
+          </tr>
+          <tr>
+            <td><code>miunlock set sigdata()</code></td>
+            <td>Store verified signature in RPMB</td>
+          </tr>
+          <tr>
+            <td><code>mi_check_magic()</code> / <code>mi_get_magic()</code> / <code>mi_set_magic()</code></td>
+            <td>RPMB magic for lock state</td>
+          </tr>
+          <tr>
+            <td><code>mi_get_sig()</code> / <code>mi_set_sig()</code></td>
+            <td>Unlock signatures in RPMB</td>
+          </tr>
+          <tr>
+            <td><code>Custom_error_process()</code></td>
+            <td>Error handler reporting seccfg+MiCustom state</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="rsa-public-key--file-0xa85c0">Открытый ключ RSA (@ файл 0xa85c0)</h3>
+      <p>2048-bit RSA key:</p>
+      <pre><code>Offset 0xa85c0: 20 b8 27 e3 4f 0d 13 c4 0e c5 c8 ab bc 13 f0 28 ...
+</code></pre>
+      <ul>
+        <li>Exponent: 0x10001 (65537)</li>
+        <li><code>rsa_exptmod</code> @ 0xa8200</li>
+        <li><code>RSA_padding_add</code> — PKCS padding verification</li>
+      </ul>
+      <h3 id="token-structure">Структура токена</h3>
+      <ul>
+        <li>Base64 encoded (alphabet: <code>A-Za-z0-9+/</code>)</li>
+        <li>Contains: device serial number + RSA signature</li>
+        <li>Size descriptors: <code>"no sig stored"</code>, <code>"sig_len = %d"</code></li>
+        <li>Verified against: <code>SHA256(ufsid + cpuid + serial)</code></li>
+        <li>Error strings: <code>"ERROR: CAN NOT SHA256(UFSID)"</code>,
+          <code>"Error: digital number (%d) of rsa n is smaller than that (%d) of input data"</code>,
+          <code>"Error: fail to read rsa n data"</code></li>
+      </ul>
+      <h3 id="unlock-flow-9-phases">Процесс разблокировки (9 фаз)</h3>
+      <ol>
+        <li><strong>Phase 1: Command reception — fastboot oem unlock [data]</strong></li>
+        <li><strong>Phase 2: Permission check — read unlock_ability from SECCFG</strong></li>
+        <li><strong>Phase 3: User confirmation (no token) — volume key prompt, power-off timeout</strong></li>
+        <li><strong>Phase 4: Token verification — miunlock verity() via RSA</strong></li>
+        <li><strong>Phase 5: Data wipe — unlock_erase() userdata</strong></li>
+        <li><strong>Phase 6: State transition — mi_set_lock_state(UNLOCKED) → seccfg_set_lock_state(2)</strong></li>
+        <li><strong>Phase 7: ATF hardware state — set_hw_locked_in_atf(0) via SMC</strong></li>
+        <li><strong>Phase 8: Boot state update — cmdline orange, AVB allow_unverified_slots=true</strong></li>
+        <li><strong>Phase 9: Reboot</strong></li>
+      </ol>
+      <h3 id="key-file-locations-summary">Сводка расположения ключевых файлов</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Элемент</th>
+            <th>Смещение в файле</th>
+            <th>Виртуальный адрес</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>LK entry point</td>
+            <td>0x200</td>
+            <td>0x48200200</td>
+          </tr>
+          <tr>
+            <td>Image size field</td>
+            <td>0x004</td>
+            <td>0x48200004</td>
+          </tr>
+          <tr>
+            <td><code>-fastboot_oem_lock</code> command</td>
+            <td>0x11c500</td>
+            <td>0x4831c500</td>
+          </tr>
+          <tr>
+            <td>MiCustom Get LockState</td>
+            <td>0xa80dc</td>
+            <td>0x482a80dc</td>
+          </tr>
+          <tr>
+            <td>MiCustom Set LockState</td>
+            <td>0xa80f8</td>
+            <td>0x482a80f8</td>
+          </tr>
+          <tr>
+            <td><code>mi_get_lock_state</code></td>
+            <td>0xa8130</td>
+            <td>0x482a8130</td>
+          </tr>
+          <tr>
+            <td><code>mi_set_lock_state</code></td>
+            <td>0xa811c</td>
+            <td>0x482a811c</td>
+          </tr>
+          <tr>
+            <td><code>mi_gen_unlock_token</code></td>
+            <td>0xa86c8</td>
+            <td>0x482a86c8</td>
+          </tr>
+          <tr>
+            <td>RSA key data</td>
+            <td>0xa85c0</td>
+            <td>0x482a85c0</td>
+          </tr>
+          <tr>
+            <td><code>token SN verify success</code></td>
+            <td>0xa8388</td>
+            <td>0x482a8388</td>
+          </tr>
+          <tr>
+            <td><code>set_hw_locked_in_atf</code></td>
+            <td>0x12b290</td>
+            <td>0x4832b290</td>
+          </tr>
+          <tr>
+            <td>SECCFG init strings</td>
+            <td>0x137000+</td>
+            <td>0x48337000+</td>
+          </tr>
+          <tr>
+            <td><code>SEC_UNLOCK</code></td>
+            <td>0x137244</td>
+            <td>0x48337244</td>
+          </tr>
+          <tr>
+            <td><code>g_sec_oemkey</code></td>
+            <td>0x137bdc</td>
+            <td>0x48337bdc</td>
+          </tr>
+          <tr>
+            <td>Orange warning string</td>
+            <td>0xa855d</td>
+            <td>0x482a855d</td>
+          </tr>
+          <tr>
+            <td>Red warning string</td>
+            <td>0xa856c</td>
+            <td>0x482a856c</td>
+          </tr>
+          <tr>
+            <td>ATF SMC FID 0xC2000000</td>
+            <td>0x1c1dac</td>
+            <td>0x483c1dac</td>
+          </tr>
+          <tr>
+            <td>ATF SMC FID 0x82000000</td>
+            <td>0x1c44c0</td>
+            <td>0x483c44c0</td>
+          </tr>
+          <tr>
+            <td>SMC <code>set_hw_locked</code> area</td>
+            <td>0x1bed88+</td>
+            <td>0x483bed88+</td>
+          </tr>
+          <tr>
+            <td>RPMB auth key success</td>
+            <td>0x10e1f</td>
+            <td>0x48110e1f</td>
+          </tr>
+          <tr>
+            <td>RPMB auth key fail</td>
+            <td>0x10e44</td>
+            <td>0x48110e44</td>
+          </tr>
+          <tr>
+            <td>Boot state orange cmdline</td>
+            <td>0x119504</td>
+            <td>0x48319504</td>
+          </tr>
+          <tr>
+            <td>Boot state red cmdline</td>
+            <td>0x119530</td>
+            <td>0x48319530</td>
+          </tr>
+          <tr>
+            <td>Boot state yellow cmdline</td>
+            <td>0x119558</td>
+            <td>0x48319558</td>
+          </tr>
+          <tr>
+            <td>Boot state green cmdline</td>
+            <td>0x119584</td>
+            <td>0x48319584</td>
+          </tr>
+          <tr>
+            <td><code>welcome to lk</code></td>
+            <td>0xa87e0</td>
+            <td>0x482a87e0</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="set_lock_state-0x27334--state-transition-table"><code>set_lock_state</code> (0x27334) — State Transition
+        Table</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Вход</th>
+            <th>Ветвь</th>
+            <th>Эффект</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>6</td>
+            <td>0x273F2</td>
+            <td>Stores 3 into <code>[r8]</code></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>0x274C0</td>
+            <td>Reads seccfg, stores 1 into <code>[r8]</code></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>0x273B4</td>
+            <td>Stores 4 into <code>[r8]</code> (pass-through?)</td>
+          </tr>
+          <tr>
+            <td>other</td>
+            <td>0x273BC</td>
+            <td>Error path</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Invalid transitions print error and return error code.</p>
+      <hr>
+      <h2 id="10-atf-trustzone-interaction">10. Взаимодействие с ATF TrustZone</h2>
+      <p>Communicates via SMC (Secure Monitor Call) instructions. 98 ARM-mode SMC + 5 Thumb SMC found.</p>
+      <p><strong>SMC protocol:</strong> Fast SMC, immediate <code>0xF0</code> common, function IDs in literal pools:</p>
+      <ul>
+        <li><code>0xC2000000</code> — MTK custom fast SMC</li>
+        <li><code>0x82000000</code> — Standard fast SMC (OEM/service)</li>
+      </ul>
+      <p><strong>Key functions:</strong></p>
+      <ul>
+        <li><code>set_hw_locked_in_atf(lock_state)</code> — SMC call to ATF, sets hardware lock fuse</li>
+        <li>String: <code>"[Sec] We are going to enter ATF for smc call"</code></li>
+        <li>Parameters: R0=FID, R1=lock state (0=unlock, 1=lock)</li>
+      </ul>
+      <p><strong>Hardware fuses controlled by ATF:</strong></p>
+      <ul>
+        <li><strong>SBC</strong> (Secure Boot Control) — secure boot enforcement</li>
+        <li><strong>SDL</strong> (Security Debug Lock) — debug port access control</li>
+        <li>Read via: <code>dump sw sbc:0x%x, sw sdl:0x%x, hw sbc: %d</code></li>
+      </ul>
+      <h3 id="key-smc-locations">Ключевые расположения SMC</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Смещение в файле</th>
+            <th>SMC #</th>
+            <th>Назначение</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x34A8</td>
+            <td>#32</td>
+            <td>Early platform init</td>
+          </tr>
+          <tr>
+            <td>0x3994</td>
+            <td>#144</td>
+            <td>Platform init</td>
+          </tr>
+          <tr>
+            <td>0x81FD4</td>
+            <td>#42</td>
+            <td>Near "SMC call" string</td>
+          </tr>
+          <tr>
+            <td>0xA5250</td>
+            <td>#0</td>
+            <td>Lock_state query?</td>
+          </tr>
+          <tr>
+            <td>0x2527E</td>
+            <td>#222</td>
+            <td>Thumb SMC, Xiaomi custom?</td>
+          </tr>
+          <tr>
+            <td>0x75F52</td>
+            <td>#222</td>
+            <td>Thumb SMC, Xiaomi custom?</td>
+          </tr>
+          <tr>
+            <td>0x1278D0</td>
+            <td>#58</td>
+            <td>Late boot / AVB</td>
+          </tr>
+          <tr>
+            <td>0x13F148</td>
+            <td>#0</td>
+            <td>Late boot</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr>
+      <h2 id="11-rpmb">11. RPMB</h2>
+      <p>Replay Protected Memory Block used for:</p>
+      <ol>
+        <li><strong>Authentication key programming</strong> — shared secret storage</li>
+        <li><strong>Write protection configuration</strong> — partition tamper prevention</li>
+        <li><strong>Unlock audit trail</strong> — unlock signature evidence</li>
+      </ol>
+      <p>Write protection: <code>mmc_set_boot_wp()</code>, <code>ufs_set_write_protect()</code>, partition range WP,
+        power-on/perm WP.</p>
+      <hr>
+      <h2 id="12-cryptography">12. Криптография</h2>
+      <h3 id="rsa">RSA</h3>
+      <ul>
+        <li>MiCustom token verification: RSA 2048-bit, PKCS padding</li>
+        <li>OEM public key <code>g_sec_oemkey</code> @ 0x137bdc</li>
+        <li>AVB verification: RSA via <code>avb_hal_verify_public_key</code> (0x6463C)</li>
+      </ul>
+      <h3 id="sha-256">SHA-256</h3>
+      <p>Used for: UFSID hashing, RPMB HMAC, image hash verification, AVB hash descriptors.</p>
+      <h3 id="hmac">HMAC</h3>
+      <p>RPMB authentication: <code>rpmb_hmac error</code>, <code>compare hmac error</code>,
+        <code>Authentication failure(MAC not match)</code>.</p>
+      <hr>
+      <h2 id="13-preloader-verification-bypass--two-strategies">13. Обход верификации Preloader — Две стратегии</h2>
+      <h3 id="method-a-call-site-nop-preloader_ruby_patchedbin">Method A: Call-Site NOP
+        (<code>preloader_ruby_patched.bin</code>)</h3>
+      <p>12 bytes, 3 sites:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Расположение</th>
+            <th>Оригинал</th>
+            <th>Модифицировано</th>
+            <th>Эффект</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x3E66C</td>
+            <td><code>bl 0x50CD4</code> (RSA verify)</td>
+            <td><code>nop; nop</code></td>
+            <td>Removes RSA verify call</td>
+          </tr>
+          <tr>
+            <td>0x3E68C</td>
+            <td><code>bl 0x522C0</code> (check fn)</td>
+            <td><code>nop; nop</code></td>
+            <td>Removes check call</td>
+          </tr>
+          <tr>
+            <td>0x4618E</td>
+            <td><code>ubfx r0,r0,#1,#1</code></td>
+            <td><code>movs r0,#0; nop</code></td>
+            <td>Partition init returns 0</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="method-b-function-return-preloader_ruby_patched_lo">Method B: Function-Return
+        (<code>preloader_ruby_patched_local.bin</code>)</h3>
+      <p>8 bytes, 2 sites:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Расположение</th>
+            <th>Оригинал</th>
+            <th>Модифицировано</th>
+            <th>Эффект</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x50CD4</td>
+            <td><code>push.w {r4-r7,sb,sl,fp,lr}</code></td>
+            <td><code>movs r0,#0; bx lr</code></td>
+            <td>RSA_verify_main→return 0</td>
+          </tr>
+          <tr>
+            <td>0x50F94</td>
+            <td><code>push {r4-r7,lr}; sub sp,#0x2c</code></td>
+            <td><code>movs r0,#0; bx lr</code></td>
+            <td>image_auth_check→return 0</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Both achieve same result: <strong>no signature verification on any loaded image</strong>.</p>
+      <h3 id="rsa_verify_main-0x50cd4--sub-call-chain">RSA_verify_main (0x50CD4) — Цепочка подвызовов</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">push.w {r4-r7,sb,sl,fp,lr}; sub sp,#0x48 (prologue)</span>
+            </div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x461E0 (crypto init)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x3294C, 0x461FA (load RSA params / data
+                parsing)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x50B14 (SHA-256 hash @ 0x50E30)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x5187C (crypto operation @ 0x50E94)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x50A58, 0x50AC4 (padding check steps)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x51B98 (RSA signature verify @ 0x50F12)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">BL 0x51D48 (hash compare @ 0x50F22)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">CMP R0,#0; IT NE; MOVNE R7,R3 (result at
+                0x50F28-0x50F2C)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">return r7 (=0 on success)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">Error branches: BNE/CBNZ at
+                0x50E36,0x50E9C,0x50EAC,0x50EEE,0x50F04,0x50F18 → 0x50F32</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">Called from: 0xD7E0 (partition_loader), 0x3E66C
+                (image_loader)</span></div>
+          </div>
+        </div>
+      </div>
+      <h3 id="image_auth_check-0x50f94--sub-call-chain">image_auth_check (0x50F94) — Цепочка подвызовов</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">push {r4-r7,lr}; sub sp,#0x2c (prologue)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">SHA256 (BL 0x50B14 @ 0x50FBC)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">hash compare (BL 0x51D48 @ 0x50FCE)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">CBNZ R0,0x50FD6 @ 0x50FC2 → "[%s] img auth
+                fail(0x%x)"</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">CBZ R0,0x50FE6 @ 0x50FD2 → "[%s] %s" "Verify Pass"</span>
+            </div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">return r4 (=0 on success)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">Called from: 0x3E848 (image_loader)</span></div>
+          </div>
+        </div>
+      </div>
+      <h3 id="additional-verification-functions">Дополнительные функции верификации</h3>
+      <p><strong>Function 1 (0x51118-0x5128A):</strong> Firmware verification. Contains hash compare at 0x5125A, 0x51282
+        (both BL 0x51D48). Epilogue: <code>pop.w {r4-r7,sb,sl,fp,pc}</code>.</p>
+      <p><strong>Function 2 (0x512B8-0x51400):</strong> TEE/TrustZone verification. Contains hash compare at 0x513F0 (BL
+        0x51D48). Same epilogue pattern.</p>
+      <p><strong>Relationship:</strong> <code>patched_local</code> was first attempt (function-level, smaller: 8 B).
+        <code>patched</code> was refined (call-site, subtler: 12 B).</p>
+      <h3 id="lk-patch-lk_a_patchedbin">LK Patch (<code>lk_a_patched.bin</code>)</h3>
+      <p>11 bytes at 0x273B4-0x27400:</p>
+      <pre><code class="language-armasm">Original:     Patched:
+CMP r4, #4    MOVS r3, #0
+IT EQ          STR.W r3, [r8]
+STREQ r4,[r8]  B 0x273EA
+BEQ 0x273EA   ...
+...            MOVS r3, #0
+MOVS r3, #3   STR.W r3, [r8]
+STR.W r3, [r8]
+</code></pre>
+      <p><strong>Effect:</strong> Store 0 instead of 4/3 into <code>[r8]</code> — neutralizes boot mode lock or verified
+        boot state enforcement.</p>
+      <p><strong>Important caveat:</strong> These LK patches only affect <code>set_lock_state</code> output to
+        <code>[r8]</code>. They do NOT affect AVB's <code>is_device_unlocked</code> which reads seccfg lock_state
+        directly. AVB still enforces based on <code>seccfg.lock_state == 2</code>, not the value in <code>[r8]</code>.
+      </p>
+      <h3 id="self-integrity-checks-in-lk">Проверки целостности в LK</h3>
+      <p>LK has multiple integrity checks that may detect and halt on patched code:</p>
+      <ul>
+        <li><code>sha256hw_init/process/done</code> functions at 0xA37E0, 0x137C4B</li>
+        <li><code>crc32 error!</code> strings at 0x117664, 0x11776A</li>
+        <li>Image hash verification code at 0x12A640</li>
+        <li><code>ubk_hash</code> used to verify LK's own public key root-of-trust</li>
+      </ul>
+      <p><strong>What likely kills a patched LK (3 hypotheses):</strong></p>
+      <ol>
+        <li><strong>UBK hash mismatch</strong> — LK computes hash of loaded key material, compares to fuse; patching LK
+          changes loaded code regions, key-load function behaves differently</li>
+        <li><strong>Self-CRC32 on code section</strong> — preloader-style integrity hash embedded in LK binary; patching
+          a single byte breaks it</li>
+        <li><strong>Xiaomi custom signature on ATF wrapper</strong> — preloader checks ATF header signature before
+          jumping to LK; patching LK invalidates this</li>
+      </ol>
+      <h3 id="attack-surface-bypass-difficulty-lk-level">Сложность обхода поверхности атаки (уровень LK)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Проверка</th>
+            <th>Расположение</th>
+            <th>Метод обхода</th>
+            <th>Сложность</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Custom public key load</td>
+            <td>~0x128D08 ref</td>
+            <td>NOP abort branch</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>Custom sig verification</td>
+            <td>~0x136E98 ref</td>
+            <td>NOP call or always-OK ret</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>AVB hash verification</td>
+            <td>~0x12A640 ref</td>
+            <td>Patch to always success</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>AVB lock_state check</td>
+            <td>~0x12F22C ref</td>
+            <td>Force green/orange lock</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>SMC lock_state query</td>
+            <td>various SMC #0, #42</td>
+            <td>NOP the SMC, always 0</td>
+            <td>Hard</td>
+          </tr>
+          <tr>
+            <td>UBK hash vs fuse</td>
+            <td>~0x137BB9 ref</td>
+            <td>NOP comparison branch</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>Self-CRC32 check</td>
+            <td>0x117664 ref</td>
+            <td>Patch CRC to match</td>
+            <td><strong>Hard</strong></td>
+          </tr>
+          <tr>
+            <td>Self-SHA256 check</td>
+            <td>0xA37E0 ref</td>
+            <td>Patch hash to match</td>
+            <td><strong>Hard</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Bottleneck: All checks reference strings via Thumb2 PC-relative ADR, making static XREF finding difficult
+        without full ISA-correct disassembly.</p>
+      <h3 id="next-steps-patch-investigation">Следующие шаги (исследование патчей)</h3>
+      <p>To determine which check kills patched LK:</p>
+      <ol>
+        <li><strong>UART/serial log capture</strong> — boot with patched LK, capture exact error message from console
+          output</li>
+        <li><strong>Compare CRC check</strong> — search LK binary for embedded CRC32 values covering the code region;
+          compute CRC over unpatched vs patched code</li>
+        <li><strong>ATF wrapper signature</strong> — check if ATF header (0x88168858) has a corresponding SHA256/RSA
+          signature appended to the payload</li>
+        <li><strong>NOP the UBK hash check</strong> — find <code>ubk_hash</code> comparison branch and force it to
+          continue</li>
+        <li><strong>Embrace boot.img approach</strong> — patch LK to skip <code>lk_a</code> entirely and jump to
+          boot.img kernel directly</li>
+      </ol>
+      <h3 id="preloader-style-security-duplicated-in-lk">Безопасность в стиле Preloader, продублированная в LK</h3>
+      <p>LK duplicates several preloader-level security checks:</p>
+      <ul>
+        <li><code>sec_usbdl</code> (0x136B2D) — USB download mode control</li>
+        <li><code>sec_boot</code> (0x136D1C) — Secure boot enable/disable</li>
+        <li><code>ubk_hash</code> (0x137BB9) — User public key hash (fuse)</li>
+        <li><code>ubk_hash_fuse</code> (0x137BC1) — Fuse-stored key hash</li>
+        <li><code>g_sec_oemkey</code> (0x137BD5) — OEM key for custom verification</li>
+        <li><code>check header, err(sig=0x%llx)</code> (0x129BE6) — Header signature check</li>
+      </ul>
+      <hr>
+      <h2 id="14-vulnerability-surface">14. Поверхность уязвимостей</h2>
+      <h3 id="vuln-1-gcpu-blacklist-bypass-critical">УЯЗВ 1: Обход чёрного списка GCPU (КРИТИЧЕСКИ)</h3>
+      <ul>
+        <li><strong>Stage:</strong> BROM — GCPU @ 0x10050000</li>
+        <li><strong>Files:</strong> <code>hwcrypto_gcpu.py</code>, <code>brom_config.py</code> line 1759</li>
+        <li><strong>Type:</strong> Hardware security range enforcement bypass</li>
+        <li>Blacklist registers: <code>0x102848</code>, <code>0x00106B60</code>, plus 8 others (blacklist_count=0xA)
+        </li>
+        <li>Blacklist registers writable through same AES-CBC interface as crypto — no access control separation</li>
+        <li>Exploit payload:
+          <code>pack("&amp;lt;I", 0) + pack("&amp;lt;I", 0) + pack("&amp;lt;I", 0) + pack("&amp;lt;I", 0x80)</code> →
+          write 0 to blacklist registers</li>
+        <li>Write 0 to blacklist registers → full memory R/W, BROM dump, preloader dump from SRAM</li>
+      </ul>
+      <h3 id="vuln-2-kamakiri-usb-overflow-critical">УЯЗВ 2: Kamakiri USB переполнение (КРИТИЧЕСКИ)</h3>
+      <ul>
+        <li><strong>Stage:</strong> BROM — USB CDC ACM interface</li>
+        <li><strong>Files:</strong> <code>kamakiri.py</code>, <code>kamakiri2.py</code>, <code>kamakiripl.py</code></li>
+        <li><strong>Type:</strong> USB control transfer buffer overflow + register manipulation</li>
+        <li><strong>v1 (kamakiri.py):</strong> <code>brom_register_access</code> command 0xDA → write to watchdog
+          scratch reg (<code>wdog + 0x50 = 0x10007050</code>) → overwrite <code>send_ptr</code> (0x102888) with fn ptr
+          <code>0xE8D0</code> → send command 0xE0 (SEND_CERT) → corrupted send_ptr executes payload in BROM context</li>
+        <li><strong>v2 (kamakiri2.py):</strong> CDC line coding <code>ctrl_transfer(0x21, 0x20, ...)</code> with
+          extended descriptor → stack buffer overflow (no length validation) →
+          <code>ctrl_transfer(0x80, 0x6, 0x02FF, 0, 9)</code> triggers response</li>
+        <li><strong>v3 (KamakiriPL):</strong> preloader-level CDC overflow with
+          <code>pack("&amp;lt;Q", 0x800000001C200)</code> → manipulates auth state; also <code>bypass_2nd_da()</code>
+          for DA auth bypass</li>
+      </ul>
+      <h3 id="vuln-3-heapbait-xml-overflow-critical">УЯЗВ 3: HeapBait XML переполнение (КРИТИЧЕСКИ)</h3>
+      <ul>
+        <li><strong>Stage:</strong> Download Agent — XML <code>CMD:SECURITY</code> parser</li>
+        <li><strong>Type:</strong> Heap buffer overflow (alloc 0x1400 vs read 0x2000)</li>
+        <li>3-stage: upload shellcode as signature → overflow with 5000-char filename → DPC callback → DA policy patch
+        </li>
+        <li><strong>Stage 4 patch calls:</strong></li>
+        <li><code>patch_mem(hash_bind, force_return)</code> — hash binding → return 0</li>
+        <li><code>patch_mem(vfy_pol, force_return)</code> — verify policy → return 0</li>
+        <li><code>patch_mem(dl_pol, force_return)</code> — download policy → return 0</li>
+        <li><code>patch_mem(get_hw_sbc, force_return)</code> — SBC check → return 0</li>
+        <li><code>patch_mem(sla_off, b"DA.SLA\0DISABLE")</code> — SLA auth disable (if enabled)</li>
+        <li><strong>Self-test values (ARM64 on MT6886+):</strong></li>
+      </ul>
+      <p>
+        <code>shellcode_addr=0x44C7F100, heap_init_off=0x9970, heap_base=0x4007F100, heap_size=0x32000000 (800 MB)</code>
+      </p>
+      <p><code>dpc_addr=0x40070028, cmd_loop=0x400093F0, download_addr=0x4002A844</code></p>
+      <p><code>free_addr=0x40009B78, get_node=0x40002F24, load_str=0x4000E25C</code></p>
+      <p><code>reg_cmd=0x4000935C, theheap=0x40070108, uart=0x11001000</code></p>
+      <h3 id="vuln-4-efuseotp-unprogrammed-critical">УЯЗВ 4: Efuse/OTP не запрограммированы (КРИТИЧЕСКИ)</h3>
+      <ul>
+        <li>efuse.bin: ALL 0xAA (unprogrammed erase state), otp.bin: ВСЕ 0x00</li>
+        <li>efuse.bin at 512 KB is very large for actual efuses — likely storage backing for emulated efuses</li>
+        <li>Missing: secure boot enable, JTAG disable, OEM key hash, boot config fuses</li>
+        <li><strong>No hardware root of trust</strong> — software security only. Any bypass is permanent.</li>
+      </ul>
+      <p><strong>Comparison — fully locked device vs. this device:</strong></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Возможность</th>
+            <th>Полностью заблокированное устройство</th>
+            <th>ЭТО устройство</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Secure boot efuse</td>
+            <td>Blown (0xAA→0x00)</td>
+            <td>0xAA (unblown)</td>
+          </tr>
+          <tr>
+            <td>Key fuses</td>
+            <td>Irreversible OEM key hash</td>
+            <td>All readable/writeable via GCPU</td>
+          </tr>
+          <tr>
+            <td>Tampered preloader</td>
+            <td>Fails BROM signature check</td>
+            <td>Boots (no HW enforcement)</td>
+          </tr>
+          <tr>
+            <td>USB download</td>
+            <td>Requires authenticated DA</td>
+            <td>Unauthenticated access possible</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="vuln-5-security-partitions-rewritable-high">УЯЗВ 5: Разделы безопасности перезаписываемы (ВЫСОКИЙ)</h3>
+      <ul>
+        <li>seccfg: 64 B used out of 8 MB, entire partition zeroable</li>
+        <li>gsort: minimal data, erased patterns</li>
+        <li>sec1: all zeros (2 MB) — no lock state = unlocked</li>
+        <li>vbmeta: algorithm=NONE — irrelevant if bootloader patched</li>
+      </ul>
+      <h3 id="vuln-6-preloader-rsa-verify-nop-high">УЯЗВ 6: Preloader RSA Verify NOP (ВЫСОКИЙ)</h3>
+      <ul>
+        <li>Two confirmed methods (see Section 13). Any unsigned image loads.</li>
+      </ul>
+      <h3 id="vuln-7-lk-boot-mode-state-overwrite-medium">УЯЗВ 7: LK перезапись состояния режима загрузки (СРЕДНИЙ)</h3>
+      <ul>
+        <li>Values 4 and 3 → 0 in <code>[r8]</code> — neutralizes locked/enforced boot states.</li>
+      </ul>
+      <h3 id="attack-surface-summary">Сводка поверхности атаки</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Уязвимость</th>
+            <th>Этап</th>
+            <th>Доступ</th>
+            <th>Сложность</th>
+            <th>Влияние</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>GCPU Blacklist Bypass</td>
+            <td>BROM</td>
+            <td>USB + DA</td>
+            <td>Medium</td>
+            <td>Full memory R/W</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Kamakiri USB Overflow</td>
+            <td>BROM</td>
+            <td>USB</td>
+            <td>Low</td>
+            <td>Arbitrary code in BROM</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>HeapBait XML Overflow</td>
+            <td>DA</td>
+            <td>USB + signed DA</td>
+            <td>High</td>
+            <td>Full flash R/W</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Efuse/OTP Unprogrammed</td>
+            <td>Hardware</td>
+            <td>Any</td>
+            <td>None</td>
+            <td>No permanent security</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Secpart Rewritable</td>
+            <td>Bootloader</td>
+            <td>DA access</td>
+            <td>Low</td>
+            <td>Revert security state</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>RSA Verify NOP</td>
+            <td>Preloader</td>
+            <td>Preloader modify</td>
+            <td>Low</td>
+            <td>Unsigned images boot</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>LK State Overwrite</td>
+            <td>LK</td>
+            <td>LK modify</td>
+            <td>Low</td>
+            <td>Boot mode enforcement off</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="recommended-attack-path">Рекомендуемый путь атаки</h3>
+      <ol>
+        <li>USB BROM mode (vol up + power)</li>
+        <li>Kamakiri (Vuln 2) → BROM code exec → dump BROM, verify blacklist addrs</li>
+        <li>GCPU bypass (Vuln 1) → disable blacklist → full memory access</li>
+        <li>Dump preloader from SRAM (0x200000-0x240000)</li>
+        <li>Apply preloader RSA NOP patches (Vuln 6)</li>
+        <li>Write patched preloader to boot partition</li>
+        <li>Device boots ANY unsigned boot image</li>
+      </ol>
+      <h3 id="cold-storage-note">Примечание о холодном хранении</h3>
+      <p>Efuse state (all 0xAA) is the single most critical finding:</p>
+      <ul>
+        <li>Device <strong>never</strong> had hardware secure boot enabled — OEM shipped with bootloader permanently
+          unlockable</li>
+        <li>Even a full software restore to stock <strong>cannot</strong> enable hardware secure boot (efuses were never
+          blown at the factory)</li>
+        <li>Any exploit used once will survive future software updates</li>
+        <li>OTA updates rewrite flash with locked state, but efuses remain unblown → software locks can always be
+          bypassed again via same exploits</li>
+      </ul>
+      <h3 id="vuln-detail-gsort-hex-structure">Детали уязвимости: шестнадцатеричная структура gsort</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">gsort:</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x00: "gsort\0\0\0"</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x08: version info</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x10: 0x001B8A00 (type/size)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x20: 0x88000000 (flags?)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x40+: erased patterns (0xFFFFFFFF, 0xAAAAAAAA,
+                0x5555555555555555)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x70: 0xEFDFBDDAEFDFBDDA (repeating)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x78: 0x1020422510204225 (repeating — possible rollback
+                counter)</span></div>
+          </div>
+        </div>
+      </div>
+      <p>Only 86 non-zero bytes in 16 MB partition. Contains DDR training results, <code>test_trigger_bitmap</code>,
+        <code>test_result_bitmap</code>, <code>ddr_training_times</code>, <code>retest_count</code>.</p>
+      <h3 id="vuln-detail-seccfg-hex-structure">Детали уязвимости: шестнадцатеричная структура seccfg</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode sm">seccfg:</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x00: "MMMM" magic</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x04: 0x04 (header size)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x08: 0x3C (60 = data size)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x0C: 0x03 (version 3)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x10: 0x01 (flags: 1 = enabled?)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x14: 0x00000000 (reserved)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x18: "EEEE" marker</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x1C-0x3B: 32-byte hash/secret</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">0x40+: all zeros (only 110 non-zero bytes in 8 MB)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p>Contains <code>avb.managed_verity_mode</code> string. Entire partition zeroable via any flash write primitive.
+      </p>
+      <h3 id="vuln-detail-sec1-partition">Детали уязвимости: раздел sec1</h3>
+      <p>Typical contents: bootloader lock/unlock state, device serial/identity, user data encryption key.</p>
+      <p>All zeros = no lock state written = bootloader unlocked.</p>
+      <h3 id="vuln-detail-heapbait-vulnerability-check">Детали уязвимости: проверка HeapBait</h3>
+      <pre><code class="language-python">def is_vulnerable(self):
+    if b"Dest XML file name buffer overflow" in da2:
+        return False  # DA patched against HeapBait
+    return True
+</code></pre>
+      <hr>
+      <h2 id="15-firmware-dump-details">15. Детали дампа прошивки</h2>
+      <h3 id="gpt-partition-table">Таблица разделов GPT</h3>
+      <p>Total device: ~31.9 GB. GPT header @ LBA 1 (4096 B sectors). 128 entries.</p>
+      <p>Key partition sizes (per A/B slot):</p>
+      <ul>
+        <li><code>misc</code>: 512K, <code>para</code>: 64K, <code>expdb</code>: 5 MB, <code>frp</code>: 128K</li>
+        <li><code>nvcfg</code>: 4 MB ext4, <code>nvdata</code>: 8 MB ext4</li>
+        <li><code>vbmeta*</code>: 1 MB each (4 copies: main, system, vendor × A/B)</li>
+        <li><code>metadata</code>: 4 MB ext4, <code>persist</code>: 8.3 MB ext4</li>
+        <li><code>seccfg</code>: 1 MB, <code>otp</code>: 6 MB</li>
+        <li><code>md1img_a/b</code>: 25 MB (modem)</li>
+        <li><code>lk_a/b</code>: 1 MB, <code>boot_a/b</code>: 16 MB</li>
+        <li><code>tee_a/b</code>: 640K, <code>sec1</code>: 256K, <code>efuse</code>: 64K</li>
+        <li><code>super</code>: 1.06 GB (dynamic partitions)</li>
+        <li><code>gsort</code>: 2 MB, <code>cust</code>: 256 MB EROFS, <code>rescue</code>: 16 MB ext2</li>
+      </ul>
+      <h3 id="notable-empty-partitions">Примечательные пустые разделы</h3>
+      <ul>
+        <li><code>boot_b.bin</code> — slot B unused (all zeros)</li>
+        <li><code>vendor_boot_a/b.bin</code> — vendor boot empty</li>
+        <li><code>sec1.bin</code>, <code>otp.bin</code>, <code>countrycode.bin</code> — all zeros</li>
+        <li><code>lk_b.bin</code> — slot B unused</li>
+      </ul>
+      <h3 id="vbmeta--algorithm--none-critical">vbmeta — Алгоритм = NONE (Критично)</h3>
+      <p>Все образы vbmeta используют <strong>algorithm_type 0</strong>: нет криптографической подписи, нет дескрипторов хеша, нет
+        дескрипторов hashtree. AVB фактически <strong>отключён</strong> на уровне vbmeta.</p>
+      <p>Full vbmeta header:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Поле</th>
+            <th>Значение</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Magic</td>
+            <td><code>AVB0</code></td>
+          </tr>
+          <tr>
+            <td>Required libavb</td>
+            <td>1.0</td>
+          </tr>
+          <tr>
+            <td>Algorithm</td>
+            <td><strong>0 = NONE</strong></td>
+          </tr>
+          <tr>
+            <td>Rollback Index</td>
+            <td>320 (0x140)</td>
+          </tr>
+          <tr>
+            <td>Rollback Location</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>Flags</td>
+            <td>0x00000BC0</td>
+          </tr>
+          <tr>
+            <td>Auth Data</td>
+            <td>offset=0, size=32</td>
+          </tr>
+          <tr>
+            <td>Aux Data</td>
+            <td>offset=32, size=256</td>
+          </tr>
+          <tr>
+            <td><strong>AVBTOOL version</strong></td>
+            <td><strong>1.2.0</strong> (at offset 0x80)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Это, вероятно, намеренно для пользовательской сборки (отключение верификации для производительности/объёма). Все 8 вариантов
+        vbmeta: <code>vbmeta_a/b.bin</code>, <code>vbmeta_system_a/b.bin</code>, <code>vbmeta_vendor_a/b.bin</code> —
+        все идентичны с algorithm=NONE.</p>
+      <h3 id="tee-tee_abin">TEE (tee_a.bin)</h3>
+      <ul>
+        <li>ATF BL31 + MicroTrust TEEI (proprietary MediaTek TEE, Trustonic/Kinibi lineage)</li>
+        <li>SPD for TEEID, PSCI, SMC handling</li>
+        <li>DEVAPC, IOMMU/m4u, MPU, AMMS protection</li>
+        <li>Debug build: <code>v1.6(debug):d19448dd4</code></li>
+      </ul>
+      <p><strong>BL31 component:</strong></p>
+      <ul>
+        <li><code>BL31: Preparing for EL3 exit to %s world</code> — EL3 exit handling</li>
+        <li><code>BL31: BL32 initialization failed</code> — TEE init failure</li>
+        <li><code>services/spd/teeid/400/</code> — SPD for TEEID</li>
+        <li><code>[ATF--uTos] version</code> — ATF-to-uTOS version string</li>
+        <li>ATF RAM dump: <code>atf_ram_dump_base</code>, <code>atf_crash_flag</code></li>
+      </ul>
+      <p><strong>TEEI (Trusted Выполнение Environment Interface):</strong></p>
+      <ul>
+        <li><code>teei_fastcall_handler</code>, <code>teei_standard_call</code>, <code>teei_fastcall</code></li>
+        <li>Secure world error handling, backtrace support</li>
+      </ul>
+      <p><strong>BL32/uTOS:</strong> MediaTek proprietary TEE (not OP-TEE, not Trusty). Based on Trusted Foundations /
+        Kinibi lineage from Trustonic. String <code>uTos</code> present.</p>
+      <h3 id="co-processor-firmware-all-0x88168858-wrapper-forma">Прошивки сопроцессоров (все в формате обёртки 0x88168858)
+      </h3>
+      <p>Format: <code>0x88168858</code> magic at offset 0x00, size at 0x04, name at 0x08 (12 B ASCII), second header
+        <code>0x89891658</code> at 0x24.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Файл</th>
+            <th>Имя</th>
+            <th>Размер полезной нагрузки</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>lk_a.bin</code></td>
+            <td><code>lk</code></td>
+            <td>1,832,552</td>
+            <td>Little Kernel bootloader</td>
+          </tr>
+          <tr>
+            <td><code>scp_a.bin</code></td>
+            <td><code>tinysys-scp-</code></td>
+            <td>906,752</td>
+            <td>Сенсорный сопроцессор (RV55_A)</td>
+          </tr>
+          <tr>
+            <td><code>sspm_a.bin</code></td>
+            <td><code>tinysys-sspm</code></td>
+            <td>782,279</td>
+            <td>Процессор безопасности системы Manager</td>
+          </tr>
+          <tr>
+            <td><code>spmfw_a.bin</code></td>
+            <td><code>spmfw</code></td>
+            <td>11,395</td>
+            <td>Управление питанием системы firmware</td>
+          </tr>
+          <tr>
+            <td><code>mcupm_a.bin</code></td>
+            <td><code>tinysys-mcupm</code></td>
+            <td>436,031</td>
+            <td>Управление питанием MCU (RV33_A)</td>
+          </tr>
+          <tr>
+            <td><code>dpm_a.bin</code></td>
+            <td><code>dpmpm</code></td>
+            <td>24,400</td>
+            <td>Менеджер путей данных</td>
+          </tr>
+          <tr>
+            <td><code>md1img_a.bin</code></td>
+            <td><code>md1rom</code></td>
+            <td>33,914,304</td>
+            <td>Прошивка модема (2G/3G/4G/5G)</td>
+          </tr>
+          <tr>
+            <td><code>cam_vpu1_a.bin</code></td>
+            <td><code>cam_vpu1</code></td>
+            <td>2,044,832</td>
+            <td>Камерный VPU1 firmware</td>
+          </tr>
+          <tr>
+            <td><code>cam_vpu2_a.bin</code></td>
+            <td><code>cam_vpu2</code></td>
+            <td>6,501,696</td>
+            <td>Камерный VPU2 firmware</td>
+          </tr>
+          <tr>
+            <td><code>cam_vpu3_a.bin</code></td>
+            <td><code>cam_vpu3</code></td>
+            <td>112</td>
+            <td>Камерный VPU3 (tiny, likely stub)</td>
+          </tr>
+          <tr>
+            <td><code>audio_dsp_a.bin</code></td>
+            <td><code>hifi3_a_dram</code></td>
+            <td>32,768</td>
+            <td>Аудио DSP (HiFi3) DRAM code</td>
+          </tr>
+          <tr>
+            <td><code>gz_a.bin</code></td>
+            <td><code>gz</code></td>
+            <td>2,721,264</td>
+            <td>GenieZone (TrustZone on TrustZone)</td>
+          </tr>
+          <tr>
+            <td><code>pi_img_a.bin</code></td>
+            <td><code>pi_img</code></td>
+            <td>1,432</td>
+            <td>Proprietary image (X.509 сертификаты)</td>
+          </tr>
+          <tr>
+            <td><code>tee_a.bin</code></td>
+            <td><code>atf</code></td>
+            <td>229,376</td>
+            <td>ATF BL31 + MicroTrust TEEI</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>pi_img certificates: X.509 <code>cert1</code>, <code>cert2</code>, <code>Mediatek0</code>. Issuer dates:
+        150604031444Z / 350604031444Z. State: <code>Some-State</code>.</p>
+      <h3 id="lk-boot-mode-strings-from-binary">Строки режимов загрузки LK (из бинарника)</h3>
+      <ul>
+        <li><code>[Fastboot Mode]</code>, <code>[Recovery Mode]</code>, <code>[FACTORY]</code> — boot modes</li>
+        <li><code>Kernel Power Off Charging</code>, <code>Meta Boot</code>, <code>Alarm Boot</code> — additional modes
+        </li>
+        <li><code>ANDROID!</code> — Android boot image magic parsing</li>
+        <li><code>mkimg</code> header format support, boot image header v2 (recovery DTBO offset)</li>
+      </ul>
+      <h3 id="lk-verified-boot--security-strings">LK Verified Boot &amp; Security Strings</h3>
+      <ul>
+        <li><code>lk_avb</code> — AVB integration in LK</li>
+        <li><code>avb.managed_verity_mode</code> — AVB verity management</li>
+        <li><code>vbmeta digest</code> handling</li>
+        <li><code>[SEC] crypto engine</code> — hardware crypto</li>
+        <li><code>root of trust smc call</code>, <code>Warning! root of trust smc call is not locked</code></li>
+        <li><code>crash_recode msg</code>, <code>wdt_check_exception</code>, ATF log buffer management</li>
+      </ul>
+      <h3 id="additional-vulnerability-assessment-notes">Дополнительные заметки по оценке уязвимостей</h3>
+      <p>The preloader exposes several exploitable attack surfaces:</p>
+      <ul>
+        <li><strong>CVE-2020-0069 pattern:</strong> DRAM initialization via USB download without proper signature check
+          on downloaded images</li>
+        <li><strong>Factory test modes:</strong> <code>BR FACTORY BOOT</code>, <code>BR ATE FACTORY BOOT</code>,
+          <code>MT65XX_FACTORY_KEY</code>, <code>MT65XX_RECOVERY_KEY</code> keys detectable</li>
+        <li><strong>UART META:</strong> Engineering debug over UART, accessible via download mode</li>
+        <li><strong>No console= restriction</strong> in boot cmdline</li>
+        <li>SELinux <strong>enforcing</strong> (permissive=0) for runtime system only — does not protect boot chain</li>
+        <li><strong>Secure boot chain:</strong> Preloader verifies ATF (BL31) via <code>cert chain vfy fail</code>; ATF
+          verifies TEE (BL32) via <code>TEE verify fail</code> with rollback; but vbmeta algorithm=NONE breaks upper
+          chain</li>
+      </ul>
+      <h3 id="preloader-build-paths-from-strings">Пути сборки Preloader (из строк)</h3>
+      <pre><code>/home/work/mnt/miui_codes1/build_home_rom/vendor/mediatek/proprietary/bootable/bootloader/preloader/
+  platform/mt6877/src/drivers/
+    ANA_init_config.c, DIG_NONSHUF_config.c, DIG_SHUF_config.c
+    DRAMC_SUBSYS_config.c, DRAM_config_collection.c, LP4_dram_init.c
+    dramc_dvfs.c, dramc_pi_calibration_api.c, TX_RX_auto_gen_library.c
+  platform/common/
+    bootctrl/ab_bootcheck.c, geniezone/gz_init.c
+    trustzone/tz_tags.c, boot/boot_info.c
+</code></pre>
+      <h3 id="preloader-key-strings">Ключевые строки Preloader</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Строка</th>
+            <th>Значение</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>emergency download mode(timeout: %ds)</code></td>
+            <td>Download mode with timeout</td>
+          </tr>
+          <tr>
+            <td><code>[XMCHG_PRELOADER] xmusb350 check type</code></td>
+            <td>Xiaomi custom USB check</td>
+          </tr>
+          <tr>
+            <td><code>USB/charger boot!</code></td>
+            <td>USB boot capability</td>
+          </tr>
+          <tr>
+            <td><code>UART META Connected, Switch log port to UART2</code></td>
+            <td>UART META engineering mode</td>
+          </tr>
+          <tr>
+            <td><code>TEE verify fail...%s jump to 0</code></td>
+            <td>TEE verification failure handling</td>
+          </tr>
+          <tr>
+            <td><code>cert chain vfy fail</code></td>
+            <td>Certificate chain verification</td>
+          </tr>
+          <tr>
+            <td><code>err(signature 0x%llx!=0x%llx)</code></td>
+            <td>Signature comparison</td>
+          </tr>
+          <tr>
+            <td><code>ATF load addr:0x%x, size:0x%x</code></td>
+            <td>ATF firmware loading</td>
+          </tr>
+          <tr>
+            <td><code>Init Boot Device: %s(%d)</code></td>
+            <td>Boot device initialization</td>
+          </tr>
+          <tr>
+            <td><code>BL31</code> / <code>BL32</code> / <code>trustzone</code></td>
+            <td>TrustZone references</td>
+          </tr>
+          <tr>
+            <td><code>WDT normal boot</code> / <code>WDT reboot bypass</code></td>
+            <td>Watchdog handling</td>
+          </tr>
+          <tr>
+            <td><code>FASTBOOT</code> / <code>FACTORY</code> mode strings</td>
+            <td>Factory boot modes</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="filesystem-images">Образы файловых систем</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Файл</th>
+            <th>Тип</th>
+            <th>Размер</th>
+            <th>Детали</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>cust.bin</code></td>
+            <td><strong>EROFS</strong></td>
+            <td>2.0 GB</td>
+            <td>Сжатый только для чтения (Android cust)</td>
+          </tr>
+          <tr>
+            <td><code>super.bin</code></td>
+            <td>dynamic</td>
+            <td>8.5 GB</td>
+            <td>Contains system_a, product_a, vendor_a, system_ext_a, mi_ext_a</td>
+          </tr>
+          <tr>
+            <td><code>metadata.bin</code></td>
+            <td>ext4</td>
+            <td>32 MB</td>
+            <td>Метаданные partition</td>
+          </tr>
+          <tr>
+            <td><code>nvcfg.bin</code></td>
+            <td>ext4</td>
+            <td>32 MB</td>
+            <td>Конфигурация NVRAMuration</td>
+          </tr>
+          <tr>
+            <td><code>nvdata.bin</code></td>
+            <td>ext4</td>
+            <td>64 MB</td>
+            <td>NVRAM data</td>
+          </tr>
+          <tr>
+            <td><code>persist.bin</code></td>
+            <td>ext4</td>
+            <td>66 MB</td>
+            <td>Постоянное хранилище</td>
+          </tr>
+          <tr>
+            <td><code>protect1.bin</code></td>
+            <td>ext4</td>
+            <td>8 MB</td>
+            <td>Защищённое хранилище 1</td>
+          </tr>
+          <tr>
+            <td><code>protect2.bin</code></td>
+            <td>ext4</td>
+            <td>8 MB</td>
+            <td>Защищённое хранилище 2</td>
+          </tr>
+          <tr>
+            <td><code>rescue.bin</code></td>
+            <td>ext2</td>
+            <td>128 MB</td>
+            <td>Режим восстановления (label: "rescue")</td>
+          </tr>
+          <tr>
+            <td><code>expdb.bin</code></td>
+            <td>dBase</td>
+            <td>40 MB</td>
+            <td>Журнал системных событийs</td>
+          </tr>
+          <tr>
+            <td><code>md1img_a.bin</code></td>
+            <td>raw</td>
+            <td>200 MB</td>
+            <td>Raw modem firmware</td>
+          </tr>
+          <tr>
+            <td><code>md1img_b.bin</code></td>
+            <td><strong>F2FS</strong></td>
+            <td>200 MB</td>
+            <td>Different from slot A (F2FS vs raw)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="boot-image-boot_abin">Загрузочный образ (boot_a.bin)</h3>
+      <ul>
+        <li>Android Boot Image v2, header version 2</li>
+        <li>Kernel: 16.3 MB GZIP, load @ 0x40080000</li>
+        <li>Ramdisk: 17.9 MB GZIP, load @ 0x51100000</li>
+        <li>OS: 12.0.0.418, buildvariant=user</li>
+        <li>DTB embedded in kernel</li>
+      </ul>
+      <h3 id="boot-arguments">Аргументы загрузки</h3>
+      <pre><code>androidboot.fstab_suffix=emmc
+androidboot.tee_type=2
+androidboot.bootreason=Watchdog|kernel_panic|lk_crash|wdt|wdt_sw|wdt_hw
+androidboot.rsc=CN|GL|IN|default
+androidboot.boot_trace=1
+</code></pre>
+      <hr>
+      <h2 id="16-preloader-c-port-project">16. Проект портирования Preloader на C</h2>
+      <p>A buildable C reimplementation of the preloader boot flow exists at <code>preloader_c/</code>:</p>
+      <h3 id="structure">Структура</h3>
+      <div class="flow">
+        <div class="ftree">
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">preloader_c/</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">Makefile, preloader.ld# Сборка system</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">gfh/header.S, gfh/gen_gfh.py # GFH headers (exact copy of
+                original first 256 B)</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">include/preloader.h# All types, registers,
+                prototypes</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">src/</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">startup.S# ARM init @ 0x100100, Thumb entry @
+                0x10066C</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">main.c# preloader_main(): boot flow orchestrator</span>
+            </div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">uart.c, printf.c, clib.c# UART 115200 8N1, minimal
+                stdlib</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">wdt.c, timer.c # Watchdog, 13MHz GPT timer</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">dram.c# LPDDR4x skeleton</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">gpt.c # GPT partition parser</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">loader.c # Image loader, LK boot</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">sha256.c # Full SHA-256</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">jump.S# jump_to_lk(), cache flush</span></div>
+          </div>
+          <div class="ftree-item">
+            <div class="ftree-line end"><span class="tee"></span></div>
+            <div class="ftree-node"><span class="fnode dim sm">build/ # Сборка artifacts</span></div>
+          </div>
+        </div>
+      </div>
+      <h3 id="memory-layout-preloader_c">Карта памяти (preloader_c)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Область</th>
+            <th>Адрес</th>
+            <th>Содержимое</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GFH</td>
+            <td>0x100000</td>
+            <td>GFH_FILE_INFO + 5 entries (256 B)</td>
+          </tr>
+          <tr>
+            <td>ARM init</td>
+            <td>0x100100</td>
+            <td>CPU setup, zero regs, BSS clear, switch to Thumb</td>
+          </tr>
+          <tr>
+            <td>Entry</td>
+            <td>0x10066C</td>
+            <td><code>_preloader_entry</code> (cache ops)</td>
+          </tr>
+          <tr>
+            <td>Text</td>
+            <td>0x1006A0</td>
+            <td>All C code (Thumb2)</td>
+          </tr>
+          <tr>
+            <td>Rodata</td>
+            <td>follows</td>
+            <td>String constants, K256 table</td>
+          </tr>
+          <tr>
+            <td>BSS</td>
+            <td>follows</td>
+            <td>Zero-initialized data</td>
+          </tr>
+          <tr>
+            <td>Stack</td>
+            <td>0x200000</td>
+            <td>SP grows down</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="build">Сборка</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>make</th>
+            <th># → preloader_ruby_c.bin (5068 B vs original 472756 B)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>make clean</td>
+            <td># remove build artifacts</td>
+          </tr>
+          <tr>
+            <td>make size</td>
+            <td># show section sizes</td>
+          </tr>
+          <tr>
+            <td>make disasm</td>
+            <td># generate disassembly</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="status">Статус</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Возможность</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Заголовки GFH</td>
+            <td>✓ exact copy</td>
+          </tr>
+          <tr>
+            <td>ARM init (CPU/CP15)</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>UART debug (115200 8N1)</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>SHA-256</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>LK boot with cache flush</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>printf (%d %u %x %s %c)</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>GPT parser</td>
+            <td>✓ partial (flash stub)</td>
+          </tr>
+          <tr>
+            <td>Image loader</td>
+            <td>✓ partial (flash stub)</td>
+          </tr>
+          <tr>
+            <td>DRAM init</td>
+            <td>✓ skeleton</td>
+          </tr>
+          <tr>
+            <td>USB download fallback</td>
+            <td>○ stub (wfi loop)</td>
+          </tr>
+          <tr>
+            <td>RSA verification</td>
+            <td>○ skipped (not implemented)</td>
+          </tr>
+          <tr>
+            <td>RK key verification</td>
+            <td>○ not implemented</td>
+          </tr>
+          <tr>
+            <td>UFS/eMMC driver</td>
+            <td>○ stub (-1 return)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3 id="dependencies">Зависимости</h3>
+      <p><code>arm-none-eabi-gcc</code>, <code>arm-none-eabi-binutils</code>, GNU Make, Python 3</p>
+      <hr>
+      <h2 id="17-memory-map">17. Карта памяти</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Область</th>
+            <th>Начало</th>
+            <th>Конец</th>
+            <th>Используется</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>BROM (in SoC)</td>
+            <td>0x00000000</td>
+            <td>0x0001FFFF</td>
+            <td>BROM code (128 KB)</td>
+          </tr>
+          <tr>
+            <td>SRAM stack</td>
+            <td>0x00013084</td>
+            <td>0x00013150</td>
+            <td>BROM stacks (IRQ/SVC)</td>
+          </tr>
+          <tr>
+            <td>SRAM context</td>
+            <td>0x00102B60</td>
+            <td>0x00102B80</td>
+            <td>BROM context save</td>
+          </tr>
+          <tr>
+            <td>Preloader</td>
+            <td>0x00100000</td>
+            <td>0x001736B4</td>
+            <td>Preloader (loaded by BROM)</td>
+          </tr>
+          <tr>
+            <td>DRAM stack</td>
+            <td>0x20000000+</td>
+            <td>Preloader/LK stacks</td>
+          </tr>
+          <tr>
+            <td>LK code</td>
+            <td>0x48200000</td>
+            <td>0x483BF668</td>
+            <td>LK bootloader (8 MB)</td>
+          </tr>
+          <tr>
+            <td>DRAM heap</td>
+            <td>0x40000000+</td>
+            <td>Available DRAM (up to 12 GB)</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr>
+      <h2 id="18-source-files-index-all-preserved">18. Индекс исходных файлов (все сохранены)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Файл</th>
+            <th>Последнее изменение</th>
+            <th>Тема</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>avb/read-is-unlocked-analysis.md</code></td>
+            <td>2026-06-14 02:39</td>
+            <td>AVB <code>read_is_device_unlocked</code> callback at 0x7a000</td>
+          </tr>
+          <tr>
+            <td><code>lk/function-analysis.md</code></td>
+            <td>2026-06-13 23:15</td>
+            <td>836 functions, LDR+ADD pattern, dead debug strings</td>
+          </tr>
+          <tr>
+            <td><code>lk/fastboot-commands.md</code></td>
+            <td>2026-06-13 19:29</td>
+            <td>Full fastboot command reference, 25+ OEM commands</td>
+          </tr>
+          <tr>
+            <td><code>lk/unlock-analysis.md</code></td>
+            <td>2026-06-13 16:27</td>
+            <td>Full unlock flow, MiCustom, SECCFG, RPMB, ATF, crypto</td>
+          </tr>
+          <tr>
+            <td><code>lk/security-analysis.md</code></td>
+            <td>2026-06-13 15:57</td>
+            <td>Self-relocation, SMC calls, Xiaomi custom security, attack surface</td>
+          </tr>
+          <tr>
+            <td><code>reports/firmware-dump-analysis.md</code></td>
+            <td>2026-06-13 14:51</td>
+            <td>Full partition dump analysis, GPT, vbmeta, TEE, co-processors</td>
+          </tr>
+          <tr>
+            <td><code>bootchain/consolidated-report.md</code></td>
+            <td>2026-06-12 20:51</td>
+            <td>Boot chain synthesis, patches, vulnerability summary</td>
+          </tr>
+          <tr>
+            <td><code>preloader/c-port-progress.md</code></td>
+            <td>2026-06-11 13:05</td>
+            <td>Preloader C reimplementation project</td>
+          </tr>
+          <tr>
+            <td><code>reports/vulnerability-surface.md</code></td>
+            <td>2026-06-11 11:44</td>
+            <td>7 vulnerability classes, efuse finding, exploit paths</td>
+          </tr>
+          <tr>
+            <td><code>bootchain/bootchain-report.md</code></td>
+            <td>2026-06-11 11:30</td>
+            <td>Full boot chain BROM→Preloader→LK→Kernel</td>
+          </tr>
+          <tr>
+            <td><code>bootchain/analysis-progress.md</code></td>
+            <td>2026-06-11 11:27</td>
+            <td>Analysis progress, patch byte-level details</td>
+          </tr>
+          <tr>
+            <td><code>preloader/re-context.md</code></td>
+            <td>2026-06-10 22:10</td>
+            <td>Preloader RE: functions, addresses, verification chain</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <hr>
+
+      <h2 id="downloads">Downloads</h2>
+      <p>All firmware dump files, patches, and analysis outputs from this project.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Файл</th>
+            <th>Размер</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="brom_MT6877_MT6877V_MT8791N_959.bin"
+                download><code>brom_MT6877_MT6877V_MT8791N_959.bin</code></a></td>
+            <td>128 KB</td>
+            <td>Дамп Boot ROM — SoC silicon boot code</td>
+          </tr>
+          <tr>
+            <td><a href="lk_a.bin" download><code>lk_a.bin</code></a></td>
+            <td>8.0 MB</td>
+            <td>Загрузчик Little Kernel (оригинал, без изменений)</td>
+          </tr>
+          <tr>
+            <td><a href="lk_a_patched.bin" download><code>lk_a_patched.bin</code></a></td>
+            <td>8.0 MB</td>
+            <td>Модифицированный LK — патч перезаписи состояния блокировки (11 Б)</td>
+          </tr>
+          <tr>
+            <td><a href="preloader_ruby.bin" download><code>preloader_ruby.bin</code></a></td>
+            <td>462 KB</td>
+            <td>Preloader Загрузчик 2-го этапа (original)</td>
+          </tr>
+          <tr>
+            <td><a href="preloader_ruby_patched.bin" download><code>preloader_ruby_patched.bin</code></a></td>
+            <td>462 KB</td>
+            <td>Модифицированный preloader — NOP в месте вызова (12 Б, 3 участка)</td>
+          </tr>
+          <tr>
+            <td><a href="preloader_ruby_patched_local.bin" download><code>preloader_ruby_patched_local.bin</code></a>
+            </td>
+            <td>462 KB</td>
+            <td>Модифицированный preloader — возврат из функции (8 Б, 2 участка)</td>
+          </tr>
+          <tr>
+            <td><a href="preloader_c.tar.xz" download><code>preloader_c.tar.xz</code></a>
+            </td>
+            <td>13 KB</td>
+            <td>Неполноценная собираемая реализация preloader-a на C</td>
+          </tr>
+        </tbody>
+      </table>
+
+
+    </div>
+  </div>
+
+  <script src="../bootloader/script.js"></script>
+  <script>hljs.highlightAll();</script>
 </body>
+
 </html>
